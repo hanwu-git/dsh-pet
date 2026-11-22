@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Border collie pet",
+    "description": "A border collie desktop pet that can be pinned to the desktop as an always-on-top window, staying visible while DSH is minimized. Task notices: done (green), failed (red), waiting for you (yellow).",
+    "detail": "docs/DETAIL.md"
+  }
+}

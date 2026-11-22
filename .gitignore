@@ -1,0 +1,23 @@
+# Node / pnpm
+node_modules/
+pnpm-lock.yaml
+
+# Runtime companion state and logs
+.companion/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Local tool artifacts
+.playwright-mcp/
+.obsidian/
+
+# Local probing / helper scripts (dot-prefixed)
+.probe*.cjs
+.validate-index.cjs
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

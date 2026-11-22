@@ -1,0 +1,4 @@
+- insert:
+    - id: border-collie-pet
+      name: 'dsh-border-collie-pet'
+      config: {}

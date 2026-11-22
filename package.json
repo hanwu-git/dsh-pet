@@ -1,0 +1,59 @@
+{
+  "name": "dsh-border-collie-pet",
+  "version": "0.4.0",
+  "description": "A border collie that lives on your desktop and tells you when DSH tasks finish, fail, or need your confirmation.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "desktop-pet",
+    "pet",
+    "notifications",
+    "task-status",
+    "border-collie"
+  ],
+  "license": "MIT",
+  "author": "Han Wu",
+  "homepage": "https://github.com/hanwu-git/dsh-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hanwu-git/dsh-pet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hanwu-git/dsh-pet/issues"
+  },
+  "type": "module",
+  "os": [
+    "win32"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.png",
+    "./pet.png": "./pet.png"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-slots"]
+    }
+  },
+  "files": [
+    "index.js",
+    "pet-service.js",
+    "client.js",
+    "companion.py",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.png",
+    "pet.png",
+    "pet-flat.png",
+    "README.md",
+    "LICENSE"
+  ]
+}
