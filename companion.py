@@ -182,6 +182,11 @@ class Companion(tk.Tk):
         self.last_state_t = 0
         self._press = None  # (px, py, wx, wy): pointer offset in window + window pos at press
 
+        # Busy animation state: while a task is running the dog gently floats up and down.
+        self.busy = False
+        self.busy_phase = 0.0
+        self.busy_after = None
+
         self.build_pet_image()
         self.bind_pet_events()
         self.handle_settings()
@@ -286,6 +291,51 @@ class Companion(tk.Tk):
                 self.current_bubble = None
             activate_dsh_window()
 
+    # ---- busy animation ------------------------------------------------------
+
+    def set_busy(self, busy):
+        """Start/stop the floating animation. Only moves the image inside the canvas —
+        never the window itself — so dragging, the color key and the window anchor stay intact."""
+        if self.busy == busy:
+            return
+        self.busy = busy
+        if busy:
+            self.busy_phase = 0.0
+            self.animate_float()
+        else:
+            if self.busy_after is not None:
+                try:
+                    self.after_cancel(self.busy_after)
+                except Exception:
+                    pass
+                self.busy_after = None
+            self.reset_pet_position()
+
+    def reset_pet_position(self):
+        """Put the dog back at its rest position (bottom = art bottom in the canvas)."""
+        try:
+            self.canvas.coords("pet", 0, self.scale_cfg["head"])
+        except Exception:
+            pass
+
+    def animate_float(self):
+        """Sine-wave float using only the head room above the art, so no part of the dog
+        ever crosses the canvas edge (which would expose the magenta key-color border)."""
+        if not self.busy:
+            return
+        import math
+        # Amplitude scaled per size; keep it within the head room (64/32/21).
+        amplitude = {1: 8, 2: 5, 3: 3}.get(self.scale, 8)
+        # ~1.6s per cycle at 60ms/frame; oscillate from rest upward only.
+        self.busy_phase = (self.busy_phase + 0.11) % (2 * math.pi)
+        offset = amplitude * (1 - math.cos(self.busy_phase)) / 2.0  # 0 .. amplitude
+        y = self.scale_cfg["head"] - offset
+        try:
+            self.canvas.coords("pet", 0, y)
+        except Exception:
+            pass
+        self.busy_after = self.after(60, self.animate_float)
+
     # ---- bubbles -------------------------------------------------------------
 
     def clear_bubble(self):
@@ -372,20 +422,29 @@ class Companion(tk.Tk):
             return
         self.last_state_t = t
 
+        # Result bubbles take priority and always stop the busy animation.
         if "test" in state:
+            self.set_busy(False)
             kind = state["test"].get("kind", "done")
             self.show_bubble(kind, KINDS[kind]["label"])
             return
         if "fail" in state:
+            self.set_busy(False)
             msg = state["fail"].get("message", "")
             text = "执行失败：" + msg[:24] if msg else "执行失败"
             self.show_bubble("fail", text)
             return
         if "ask" in state:
+            self.set_busy(False)
             self.show_bubble("ask", "等你确定")
             return
         if "runningEnd" in state:
+            self.set_busy(False)
             self.show_bubble("done", "执行完成")
+            return
+        # Task started: float the dog while work is in progress (no bubble for this state).
+        if "run" in state and state["run"].get("running"):
+            self.set_busy(True)
 
 
 def main():
