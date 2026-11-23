@@ -404,10 +404,32 @@ window.__ModuleLoader__.load({
 
     let ctxRemote = null;
 
+    // Poll the host for "navigate to session" requests queued by the desktop window.
+    // Host cannot emit a custom forwarded event (DSH's remote-event allowlist is closed to
+    // plugins), so the client pulls instead. A request is delivered once then cleared host-side.
+    function startNavigationPoller(ctx) {
+      let stopped = false;
+      let inFlight = false;
+      const tick = async () => {
+        if (stopped || inFlight) return;
+        inFlight = true;
+        try {
+          const r = await rpc('take-navigation');
+          if (r && r.sessionId && ctx.uiWorkspace && typeof ctx.uiWorkspace.openSession === 'function') {
+            try { ctx.uiWorkspace.openSession(r.sessionId); } catch (e) { /* session gone / no access */ }
+          }
+        } catch (e) { /* transient RPC failure; retry next tick */ }
+        finally { inFlight = false; }
+      };
+      const timer = setInterval(tick, 1000);
+      ctx.effect(() => () => { stopped = true; clearInterval(timer); });
+    }
+
     return {
-      inject: ['slots', 'remote'],
+      inject: ['slots', 'remote', 'uiWorkspace'],
       apply(ctx) {
         ctxRemote = ctx.remote;
+        startNavigationPoller(ctx);
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay', id: 'border-collie-pet', order: 10,
         }, () => Pet({ ctxRemote })));

@@ -182,10 +182,9 @@ class Companion(tk.Tk):
         self.last_state_t = 0
         self._press = None  # (px, py, wx, wy): pointer offset in window + window pos at press
 
-        # Busy animation state: while a task is running the dog gently floats up and down.
-        self.busy = False
-        self.busy_phase = 0.0
-        self.busy_after = None
+        # Status light: a small dot at the dog's top-right corner, on iff a task is running.
+        self.status_dot = None
+        self.active = False
 
         self.build_pet_image()
         self.bind_pet_events()
@@ -238,7 +237,11 @@ class Companion(tk.Tk):
         except Exception:
             pass
         if bubble:
-            self.show_bubble(bubble[0], bubble[1], play_sound=False)
+            # bubble = (kind, text, session_id)
+            self.show_bubble(bubble[0], bubble[1], bubble[2] if len(bubble) > 2 else None,
+                             play_sound=False)
+        # Redraw the status light at the new scale (its position/size depends on scale).
+        self.set_active(self.active)
 
     def handle_settings(self):
         """Poll settings.json; apply size/sound changes as soon as the file changes."""
@@ -285,56 +288,47 @@ class Companion(tk.Tk):
         dx = abs(self.winfo_pointerx() - (wx + px))
         dy = abs(self.winfo_pointery() - (wy + py))
         if dx + dy <= 6:
-            # Click (not drag): dismiss bubble + call DSH to the front.
+            # Click (not drag): if a bubble with a session id is showing, queue a navigation
+            # to that conversation via cmd.json; always call DSH to the front, then clear bubble.
             if self.bubble_items:
+                sid = self.current_bubble[2] if self.current_bubble and len(self.current_bubble) > 2 else None
+                if sid:
+                    self.queue_navigation(sid)
                 self.clear_bubble()
                 self.current_bubble = None
             activate_dsh_window()
 
-    # ---- busy animation ------------------------------------------------------
-
-    def set_busy(self, busy):
-        """Start/stop the floating animation. Only moves the image inside the canvas —
-        never the window itself — so dragging, the color key and the window anchor stay intact."""
-        if self.busy == busy:
-            return
-        self.busy = busy
-        if busy:
-            self.busy_phase = 0.0
-            self.animate_float()
-        else:
-            if self.busy_after is not None:
-                try:
-                    self.after_cancel(self.busy_after)
-                except Exception:
-                    pass
-                self.busy_after = None
-            self.reset_pet_position()
-
-    def reset_pet_position(self):
-        """Put the dog back at its rest position (bottom = art bottom in the canvas)."""
+    def queue_navigation(self, session_id):
+        """Ask the host (via cmd.json) to have the web client open this conversation."""
         try:
-            self.canvas.coords("pet", 0, self.scale_cfg["head"])
+            import time
+            CMD_FILE.write_text(json.dumps({
+                "kind": "navigate", "sessionId": str(session_id), "t": int(time.time() * 1000),
+            }), encoding="utf-8")
         except Exception:
             pass
 
-    def animate_float(self):
-        """Sine-wave float using only the head room above the art, so no part of the dog
-        ever crosses the canvas edge (which would expose the magenta key-color border)."""
-        if not self.busy:
+    # ---- status light --------------------------------------------------------
+
+    def set_active(self, active):
+        """Show/hide a small green dot at the dog's top-right corner. On iff a task is running.
+        The dot is a canvas item inside the window, so it never affects dragging or the color key."""
+        self.active = bool(active)
+        if self.status_dot is not None:
+            try:
+                self.canvas.delete(self.status_dot)
+            except Exception:
+                pass
+            self.status_dot = None
+        if not self.active:
             return
-        import math
-        # Amplitude scaled per size; keep it within the head room (64/32/21).
-        amplitude = {1: 8, 2: 5, 3: 3}.get(self.scale, 8)
-        # ~1.6s per cycle at 60ms/frame; oscillate from rest upward only.
-        self.busy_phase = (self.busy_phase + 0.11) % (2 * math.pi)
-        offset = amplitude * (1 - math.cos(self.busy_phase)) / 2.0  # 0 .. amplitude
-        y = self.scale_cfg["head"] - offset
-        try:
-            self.canvas.coords("pet", 0, y)
-        except Exception:
-            pass
-        self.busy_after = self.after(60, self.animate_float)
+        r = {1: 6, 2: 4, 3: 3}.get(self.scale, 6)
+        # Place just inside the top-right corner of the artwork.
+        x = self.total_w - r - 4
+        y = self.scale_cfg["head"] + r + 4
+        self.status_dot = self.canvas.create_oval(
+            x - r, y - r, x + r, y + r,
+            fill="#5cb85c", outline="#1e6b2f", width=1, tags="statusdot")
 
     # ---- bubbles -------------------------------------------------------------
 
@@ -344,8 +338,9 @@ class Companion(tk.Tk):
         self.bubble_items = []
         self.bubble_kind = None
 
-    def show_bubble(self, kind, text, play_sound=True):
+    def show_bubble(self, kind, text, session_id=None, play_sound=True):
         # Newer results REPLACE the previous bubble's content (no auto-dismiss).
+        # session_id is remembered so a click can navigate DSH to this conversation.
         self.clear_bubble()
         cfg = self.scale_cfg
         colors = KINDS[kind]
@@ -368,7 +363,7 @@ class Companion(tk.Tk):
             cx, (y0 + y1) // 2, text=text, fill=colors["fg"],
             font=("Microsoft YaHei UI", cfg["font"], "bold")))
         self.bubble_kind = kind
-        self.current_bubble = (kind, text)
+        self.current_bubble = (kind, text, session_id)
         if play_sound and self.sound_on:
             play_bubble_sound(kind)
 
@@ -408,6 +403,11 @@ class Companion(tk.Tk):
         if cmd.get("kind") == "quit":
             self.destroy()
             os._exit(0)
+        if cmd.get("kind") == "navigate":
+            # This command is for the HOST (it forwards to the web client). Do NOT clear it —
+            # the companion itself writes it and the host polls/clears it.
+            return
+        # Empty / unknown command: clear so a stale quit cannot replay after a restart.
         try:
             CMD_FILE.write_text("", encoding="utf-8")
         except Exception:
@@ -422,29 +422,26 @@ class Companion(tk.Tk):
             return
         self.last_state_t = t
 
-        # Result bubbles take priority and always stop the busy animation.
+        # Status light reflects the authoritative `active` flag written by the host
+        # (true iff any session is running). It is present on every write now.
+        if "active" in state:
+            self.set_active(state["active"])
+
+        # Result bubbles (each carries a session id so a click can navigate there).
         if "test" in state:
-            self.set_busy(False)
             kind = state["test"].get("kind", "done")
             self.show_bubble(kind, KINDS[kind]["label"])
             return
         if "fail" in state:
-            self.set_busy(False)
             msg = state["fail"].get("message", "")
             text = "执行失败：" + msg[:24] if msg else "执行失败"
-            self.show_bubble("fail", text)
+            self.show_bubble("fail", text, state["fail"].get("id"))
             return
         if "ask" in state:
-            self.set_busy(False)
-            self.show_bubble("ask", "等你确定")
+            self.show_bubble("ask", "等你确定", state["ask"].get("id"))
             return
         if "runningEnd" in state:
-            self.set_busy(False)
-            self.show_bubble("done", "执行完成")
-            return
-        # Task started: float the dog while work is in progress (no bubble for this state).
-        if "run" in state and state["run"].get("running"):
-            self.set_busy(True)
+            self.show_bubble("done", "执行完成", state["runningEnd"].get("id"))
 
 
 def main():

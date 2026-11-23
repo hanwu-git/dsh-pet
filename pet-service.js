@@ -66,12 +66,26 @@ let stateSeq = 0;
 
 let ownerPid = null;
 
+// Session ids currently in the "running" state. The status light is on iff this set is non-empty:
+// one agent ending must not turn the light off while other agents are still working.
+const runningSet = new Set();
+// Most recent "navigate to this session" request, handed from the desktop window (via cmd.json)
+// to the web client (via the take-navigation RPC). Overwrite semantics are fine: latest wins.
+let pendingNavigation = null;
+
 function writeState(patch) {
   try {
     mkdirSync(stateDir, { recursive: true });
     stateSeq += 1;
-    // Preserve the owner field: the companion's orphan guard reads it on every poll.
-    writeFileSync(stateFile, JSON.stringify({ ...patch, ...(ownerPid ? { owner: ownerPid } : {}), t: stateSeq }));
+    // writeState replaces the whole file, so always include the fields the companion needs to
+    // persist across unrelated events: owner (orphan guard) and active (status light). Without
+    // this, a fail/ask event would silently drop the current light state.
+    writeFileSync(stateFile, JSON.stringify({
+      active: runningSet.size > 0,
+      ...patch,
+      ...(ownerPid ? { owner: ownerPid } : {}),
+      t: stateSeq,
+    }));
     logLine("state", { patch: Object.keys(patch).join(","), t: stateSeq });
   } catch { /* ignore */ }
 }
@@ -219,13 +233,20 @@ export function apply(ctx) {
     if (result.ok) logLine("auto-pin-restored", {});
   }
 
-  // Task signals → companion window bubbles (only meaningful while pinned).
+  // Task signals → companion window (only meaningful while pinned).
+  // Track running sessions per-agent so the status light stays on while ANY agent is working,
+  // and emit a completion bubble on EVERY agent end (even while others keep running).
+  // writeState replaces the whole file each call, so `active` and `runningEnd` must be written
+  // in the SAME call — two calls would overwrite each other.
   ctx.on("agent/status", ({ agent, status }) => {
     if (!pinned) return;
+    const id = agent && agent.id;
     if (status === "running") {
-      writeState({ run: { id: agent && agent.id, running: true } });
+      if (id) runningSet.add(id);
+      writeState({ active: true });
     } else {
-      writeState({ runningEnd: { id: agent && agent.id } });
+      if (id) runningSet.delete(id);
+      writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
   });
   ctx.on("agent/error", ({ agent, error }) => {
@@ -243,6 +264,22 @@ export function apply(ctx) {
       writeState({ askDone: { id: session.id } });
     }
   }, { global: true });
+
+  // Pick up "navigate to session" commands written by the desktop window into cmd.json.
+  // (The companion writes quit there too; we only react to kind === "navigate" and leave other
+  // commands alone.) Take-and-clear so a command is delivered exactly once.
+  const cmdTimer = setInterval(() => {
+    try {
+      if (!existsSync(cmdFile)) return;
+      const cmd = JSON.parse(readFileSync(cmdFile, "utf8") || "{}");
+      if (cmd && cmd.kind === "navigate" && cmd.sessionId) {
+        pendingNavigation = { sessionId: String(cmd.sessionId), t: cmd.t || Date.now() };
+        writeFileSync(cmdFile, "", "utf8");
+        logLine("nav-queued", { sessionId: pendingNavigation.sessionId });
+      }
+    } catch { /* ignore transient read/write races */ }
+  }, 800);
+  ctx.effect(() => () => clearInterval(cmdTimer));
 
   // RPC route behind the connection trust fence (browser cookie is verified per request).
   ctx.effect(() => ctx.webServer.register({
@@ -325,6 +362,14 @@ export function apply(ctx) {
         if (!pinned) { sendJson(res, 200, { ok: false, error: "not pinned" }); return; }
         writeState({ test: { kind } });
         sendJson(res, 200, { ok: true, kind });
+        return;
+      }
+      if (action === "take-navigation") {
+        // The web client polls this; a queued request is handed over once, then cleared.
+        const nav = pendingNavigation;
+        pendingNavigation = null;
+        if (nav) logLine("nav-taken", { sessionId: nav.sessionId });
+        sendJson(res, 200, { ok: true, sessionId: nav ? nav.sessionId : null });
         return;
       }
       sendJson(res, 404, { ok: false, error: "unknown action" });
