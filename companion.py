@@ -1,6 +1,6 @@
 """Border collie desktop companion: always-on-top pet window with task bubbles.
 
-Usage: python companion.py <state.json> <cmd.json> <pet.png>
+Usage: python companion.py <state.json> <cmd.json> <pet.png> [ownerPid]
 
 The DSH host plugin writes task-state JSON; this window polls it and pops
 colored bubbles over the dog's head:
@@ -12,6 +12,9 @@ bubble's content (newest wins, one bubble at a time).
 
 Size (large/medium/small) and bubble sound come from <state.json dir>/settings.json,
 written by the host RPC and polled here so changes take effect immediately.
+
+The optional 5th argument is the host process pid that spawned this window. The orphan
+guard checks THAT pid, not state.json's `owner` (which a newer host overwrites).
 """
 import json
 import os
@@ -22,6 +25,11 @@ from pathlib import Path
 STATE_FILE = Path(sys.argv[1]) if len(sys.argv) > 1 else None
 CMD_FILE = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 PET_FILE = Path(sys.argv[3]) if len(sys.argv) > 3 else None
+
+# The pid of the DSH host that spawned THIS window, passed as the 5th argument. Remembered at
+# launch time: a newer host overwrites state.json's `owner` with its own pid, so a stale window
+# that re-reads state.json would see a live pid and wrongly believe it still has a host.
+OWNER_PID = int(sys.argv[4]) if len(sys.argv) > 4 and str(sys.argv[4]).isdigit() else 0
 
 POLL_MS = 400
 
@@ -324,17 +332,22 @@ class Companion(tk.Tk):
         self.after(POLL_MS, self.poll)
 
     def check_owner(self):
-        """Orphan guard: if the host process that started us has died, close quietly."""
+        """Orphan guard: if the DSH host that spawned THIS window has died, close quietly.
+
+        Uses the pid captured at launch (OWNER_PID) rather than state.json's `owner` field:
+        a newer host overwrites that field, which would leave a stale window alive.
+        """
+        owner = OWNER_PID
+        if not owner:
+            return
         try:
-            owner = read_json(STATE_FILE).get("owner")
-            if owner:
-                import ctypes
-                k32 = ctypes.windll.kernel32
-                handle = k32.OpenProcess(0x1000, False, int(owner))  # PROCESS_QUERY_LIMITED_INFORMATION
-                if not handle:
-                    self.destroy()
-                    os._exit(0)
-                k32.CloseHandle(handle)
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            handle = k32.OpenProcess(0x1000, False, int(owner))  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                self.destroy()
+                os._exit(0)
+            k32.CloseHandle(handle)
         except Exception:
             pass
 

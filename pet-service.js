@@ -128,14 +128,16 @@ function startCompanion() {
   try {
     mkdirSync(stateDir, { recursive: true });
     stateSeq = 0;
-    // owner pid lets the companion detect an orphaned self: when the writing process dies,
-    // the window closes itself instead of lingering as a ghost duplicate.
+    // owner pid is passed to the companion as a launch argument: the companion remembers the
+    // pid of the host that spawned IT, so it can tell whether its own host died. The owner
+    // field written to state.json is overwritten by any newer host, so it cannot be trusted
+    // for the orphan check (a stale window would read the new host's live pid and stay alive).
     ownerPid = process.pid;
     writeFileSync(stateFile, JSON.stringify({ t: 0, owner: ownerPid }));
     // Clear any stale command (e.g. a leftover quit from a previous run) BEFORE spawning:
     // the companion reads cmd.json on its first poll and would exit immediately otherwise.
     try { writeFileSync(cmdFile, ""); } catch { /* ignore */ }
-    companion = spawn(python, [COMPANION, stateFile, cmdFile, PET_PNG], {
+    companion = spawn(python, [COMPANION, stateFile, cmdFile, PET_PNG, String(ownerPid)], {
       detached: true,
       windowsHide: true,
       stdio: "ignore",
