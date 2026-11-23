@@ -322,13 +322,17 @@ class Companion(tk.Tk):
             self.status_dot = None
         if not self.active:
             return
-        r = {1: 6, 2: 4, 3: 3}.get(self.scale, 6)
-        # Place just inside the top-right corner of the artwork.
-        x = self.total_w - r - 4
-        y = self.scale_cfg["head"] + r + 4
+        # Keep the dot clearly visible even at the small scale: never shrink below 6px radius.
+        # (A 3px dot was easy to miss and could be covered by the bubble drawn later.)
+        r = {1: 9, 2: 7, 3: 6}.get(self.scale, 9)
+        # Sit at the artwork's top-right corner, outside the centered bubble's horizontal span.
+        x = self.total_w - r - 2
+        y = self.scale_cfg["head"] + r + 2
         self.status_dot = self.canvas.create_oval(
             x - r, y - r, x + r, y + r,
-            fill="#5cb85c", outline="#1e6b2f", width=1, tags="statusdot")
+            fill="#5cb85c", outline="#1e6b2f", width=2, tags="statusdot")
+        # Bubbles are added after the light in handle_state; raise the light above them.
+        self.canvas.tag_raise("statusdot")
 
     # ---- bubbles -------------------------------------------------------------
 
@@ -364,6 +368,12 @@ class Companion(tk.Tk):
             font=("Microsoft YaHei UI", cfg["font"], "bold")))
         self.bubble_kind = kind
         self.current_bubble = (kind, text, session_id)
+        # Keep the status light on top of the freshly drawn bubble.
+        if self.status_dot is not None:
+            try:
+                self.canvas.tag_raise("statusdot")
+            except Exception:
+                pass
         if play_sound and self.sound_on:
             play_bubble_sound(kind)
 
