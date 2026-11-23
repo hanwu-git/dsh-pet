@@ -1,6 +1,6 @@
 {
   "name": "dsh-border-collie-pet",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A border collie that lives on your desktop and tells you when DSH tasks finish, fail, or need your confirmation.",
   "keywords": [
     "dsh",
