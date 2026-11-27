@@ -14,7 +14,12 @@ name = "KuroCat"
 path = "src/main.rs"
 
 [features]
-default = []
+# dsh-pet v2.0: a plain `cargo build --release` must produce a STANDALONE exe (loading the
+# embedded frontendDist), not a dev-mode exe that expects a Vite dev server on :1420.
+# Tauri switches to embedded-assets mode via its `custom-protocol` cfg, which `tauri build`
+# enables automatically — but we build with plain cargo from the plugin, so it's on by default here.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
 layout-108 = []
 win7 = ["tauri/custom-protocol"]
 
