@@ -332,6 +332,18 @@ window.__ModuleLoader__.load({
       const [imageMsg, setImageMsg] = React.useState(null); // {ok, text}
       const [pickedPreview, setPickedPreview] = React.useState(null); // data URL being uploaded
       const [version, setVersion] = React.useState('');
+      // Pet mode + KuroCat bridge state.
+      const [petMode, setPetMode] = React.useState('collie');
+      const [kurocatEnabled, setKurocatEnabled] = React.useState(true);
+      const [kuroAutostart, setKuroAutostart] = React.useState(false);
+      const [kuroStatus, setKuroStatus] = React.useState(null); // {online, exeFound, port}
+      const [kuroMsg, setKuroMsg] = React.useState(null);
+
+      const refreshKuroStatus = React.useCallback(() => {
+        rpc('kurocat-status').then((r) => {
+          if (r && r.ok !== false) setKuroStatus(r);
+        }).catch(() => {});
+      }, []);
 
       React.useEffect(() => {
         let cancelled = false;
@@ -342,8 +354,13 @@ window.__ModuleLoader__.load({
           setImageMode(r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default');
           setHasCustom(!!r.hasCustomImage);
           setVersion(r.version || '');
+          setPetMode(r.petMode === 'kurocat' ? 'kurocat' : 'collie');
+          setKurocatEnabled(r.kurocat !== false);
+          setKuroAutostart(!!r.kurocatAutostart);
         }).catch(() => {});
-        return () => { cancelled = true; };
+        refreshKuroStatus();
+        const t = setInterval(refreshKuroStatus, 5000);
+        return () => { cancelled = true; clearInterval(t); };
       }, []);
 
       const save = React.useCallback(async (patch) => {
@@ -445,6 +462,49 @@ window.__ModuleLoader__.load({
         }
       }, [uploading]);
 
+      // ---- pet mode / KuroCat bridge -------------------------------------------
+      const setPetModeRpc = React.useCallback(async (mode) => {
+        if (busy) return;
+        setBusy(true);
+        setErr('');
+        try {
+          const r = await rpc('settings', { value: { petMode: mode } });
+          if (r && r.ok === false) setErr(String(r.error || '切换失败'));
+          else setPetMode(mode);
+        } catch (e) {
+          setErr('切换失败：' + (e && e.message ? e.message : '请求不可用'));
+        } finally {
+          setBusy(false);
+        }
+      }, [busy]);
+
+      const setKurocatOption = React.useCallback(async (patch) => {
+        setErr('');
+        try {
+          const r = await rpc('settings', { value: patch });
+          if (r && r.ok === false) setErr(String(r.error || '保存失败'));
+          else {
+            if (typeof patch.kurocat === 'boolean') setKurocatEnabled(patch.kurocat);
+            if (typeof patch.kurocatAutostart === 'boolean') setKuroAutostart(patch.kurocatAutostart);
+          }
+        } catch (e) {
+          setErr('保存失败：' + (e && e.message ? e.message : '请求不可用'));
+        }
+        refreshKuroStatus();
+      }, [refreshKuroStatus]);
+
+      const startKuro = React.useCallback(async () => {
+        setKuroMsg({ ok: null, text: '正在启动 KuroCat…' });
+        try {
+          const r = await rpc('kurocat-start');
+          if (r && r.ok) setKuroMsg({ ok: true, text: 'KuroCat 已启动' });
+          else setKuroMsg({ ok: false, text: '启动失败：' + (r && r.reason ? r.reason : '未找到 KuroCat.exe') });
+        } catch (e) {
+          setKuroMsg({ ok: false, text: '启动失败：' + (e && e.message ? e.message : '请求不可用') });
+        }
+        refreshKuroStatus();
+      }, [refreshKuroStatus]);
+
       // Audition a tone through the same path a real bubble uses, so what you hear here
       // is exactly what a task event will play.
       const preview = React.useCallback(async (kind) => {
@@ -488,6 +548,79 @@ window.__ModuleLoader__.load({
           h('p', { style: { margin: 0, fontSize: 13, opacity: 0.72 } },
             '设置桌面宠物的图片、显示尺寸与气泡提示音。修改后立即生效并自动保存。'),
         ),
+        h('div', null,
+          h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, '宠物形象'),
+          h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
+            [
+              { value: 'collie', label: '🐕 边牧（内置）', desc: '页内宠物 + 桌面固定小窗，支持自定义图片' },
+              { value: 'kurocat', label: '🐱 KuroCat（外挂）', desc: '桌面打字小黑猫，任务联动 + 敲键盘动画，需本机安装 KuroCat' },
+            ].map(o => h('button', {
+              key: o.value,
+              type: 'button',
+              onClick: () => setPetModeRpc(o.value),
+              disabled: busy,
+              style: {
+                minWidth: 200, textAlign: 'left', cursor: busy ? 'wait' : 'pointer',
+                padding: '10px 12px', borderRadius: 8,
+                border: '1px solid ' + (petMode === o.value ? '#4f8ef7' : 'rgba(128,128,128,0.4)'),
+                background: petMode === o.value ? 'rgba(79,142,247,0.12)' : 'transparent',
+                color: 'inherit',
+              },
+            },
+              h('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 4 } },
+                (petMode === o.value ? '\u2713 ' : '') + o.label),
+              h('div', { style: { fontSize: 12, opacity: 0.7 } }, o.desc),
+            )),
+          ),
+          petMode === 'kurocat' && kuroStatus ? h('div', {
+            style: { marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12 },
+          },
+            h('span', {
+              style: {
+                width: 8, height: 8, borderRadius: '50%',
+                background: kuroStatus.online ? '#5cb85c' : '#d9534f',
+                display: 'inline-block',
+              },
+            }),
+            h('span', null, kuroStatus.online
+              ? 'KuroCat 已连接（端口 ' + kuroStatus.port + '）'
+              : (kuroStatus.exeFound ? 'KuroCat 未运行' : '未找到 KuroCat（请先安装）')),
+            !kuroStatus.online && kuroStatus.exeFound ? h('button', {
+              type: 'button', onClick: startKuro,
+              style: {
+                cursor: 'pointer', padding: '3px 10px', borderRadius: 6, fontSize: 12,
+                border: '1px solid rgba(128,128,128,0.45)', background: 'transparent', color: 'inherit',
+              },
+            }, '启动') : null,
+            kuroMsg ? h('span', {
+              style: { color: kuroMsg.ok === false ? '#d9534f' : kuroMsg.ok ? '#1e6b2f' : 'inherit', opacity: kuroMsg.ok === null ? 0.7 : 1 },
+            }, kuroMsg.text) : null,
+          ) : null,
+        ),
+        petMode === 'kurocat' ? h('div', null,
+          h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, 'KuroCat 联动'),
+          h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 } },
+            h('input', {
+              type: 'checkbox',
+              checked: kurocatEnabled,
+              onChange: (e) => setKurocatOption({ kurocat: e.target.checked }),
+            }),
+            h('span', null, '转发任务状态给 KuroCat'),
+            h('span', { style: { opacity: 0.7, fontSize: 12 } }, '（任务开始/完成/失败/等你确认时驱动小猫表演）'),
+          ),
+          h('label', {
+            style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, marginTop: 8 },
+          },
+            h('input', {
+              type: 'checkbox',
+              checked: kuroAutostart,
+              disabled: !kuroStatus || !kuroStatus.exeFound,
+              onChange: (e) => setKurocatOption({ kurocatAutostart: e.target.checked }),
+            }),
+            h('span', null, 'DSH 启动时自动拉起 KuroCat'),
+            h('span', { style: { opacity: 0.7, fontSize: 12 } }, '（仅当选择 KuroCat 形象时生效）'),
+          ),
+        ) : null,
         h('div', null,
           h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, '宠物图片'),
           h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' } },

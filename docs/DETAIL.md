@@ -4,6 +4,15 @@
 
 ## 功能
 
+### KuroCat 外挂形象（0.6.0 新增）
+
+- `settings.json` 新增 `petMode`（`collie` | `kurocat`）、`kurocat`（桥开关，默认开）、`kurocatPort`（默认 27420）、`kurocatAutostart`。
+- **桥接模块**（`kurocat-bridge.js`）：每次转发前 `GET /health`（250ms 超时）探测本机 KuroCat；不在线则静默跳过。事件经 500ms 窗口合并（last-wins），只 POST 最后一条到 `POST /hook`。
+- **事件映射**：`runningStart`→`working`（敲键盘）、`runningEnd`→`done`、`fail`→`error`（附原因）、`ask`→`waiting`；`source` 固定 `"DSH"`。桥接事件只在 `runningSet` 空变非空 / 非空变空的边界触发，避免并发闪烁。
+- **接线点**（`pet-service.js`）：`agent/status`（首任务开始 / 全部结束）、`agent/error`、`session/event`（ask_user_question / approval/asked）各加一行 `kuroBridge.bridgeEvent(...)`，与 `writeState` 同步触发，且**不受 pinned 限制以外的新条件影响**（仍沿用 `if (!pinned) return` 既有门槛）。
+- **Sidecar 生命周期**：`kurocat-start` RPC 以 detached 方式 spawn `KuroCat.exe`（探测 `%LOCALAPPDATA%\KuroCat` 与 Program Files），等待端口就绪（最多 4s）；切回 `collie` 形象或 `apply` 时 `petMode=kurocat + autostart` 自动拉起。
+- **新增 RPC**：`kurocat-status`（探测 + 汇报）、`kurocat-start`、`kurocat-stop`；设置页每 5s 轮询 `kurocat-status` 显示连接状态点。
+
 ### 自定义宠物图片（0.5.0 新增）
 
 - 设置页新增「宠物图片」区：选择本机图片 → 前端 canvas 统一转为 PNG（长边 ≤ 600px）→ `set-image` RPC 上传。**图片字节被复制进插件目录** `.companion/pet-custom.png`，与原文件路径彻底解耦——用户之后删除、移动、重命名原图都不影响宠物显示。
@@ -43,7 +52,7 @@
 ## 实现说明
 
 - **Host 服务**（`pet-service.js`）：**函数插件**（`apply(ctx)` + `inject: ["webServer", "connection"]`，与 prompt-polish 同款）。注册一条 webServer 路由 `POST /border-collie-pet/rpc`（走 connection 信任墙，浏览器 cookie 鉴权），dispatch `pin` / `status` / `test` 三个 action；同时监听 Host 事件（`agent/status`、`agent/error`、`session/event` global）把任务状态写进 `.companion/state.json`。**不 import 任何 `@deepseek-ai/*` 包**——link 安装的插件真实路径上方没有 node_modules，bare import 会在激活时报 ERR_MODULE_NOT_FOUND。
-- **RPC 协议**：`{action:"pin", value:true|false}` → 启停伴生窗并持久化到 `.companion/pinned.json`；`{action:"status"}` → 查询当前固定状态（含 `image`、`hasCustomImage` 与插件 `version`，版本号从 `package.json` 读取一次并缓存）；`{action:"settings", value}` → 尺寸/声音/图片开关；`{action:"set-image", value:<dataURL>}` → 上传自定义图片；`{action:"reset-image"}` → 恢复默认；`{action:"get-image"}` → 读取当前自定义图片（data URL）；`{action:"test", kind}` → 预览气泡。
+- **RPC 协议**：`{action:"pin", value:true|false}` → 启停伴生窗并持久化到 `.companion/pinned.json`；`{action:"status"}` → 查询当前固定状态（含 `image`、`hasCustomImage`、`petMode`、`kurocat*` 与插件 `version`，版本号从 `package.json` 读取一次并缓存）；`{action:"settings", value}` → 尺寸/声音/图片/形象/KuroCat 开关；`{action:"set-image", value:<dataURL>}` → 上传自定义图片；`{action:"reset-image"}` → 恢复默认；`{action:"get-image"}` → 读取当前自定义图片（data URL）；`{action:"kurocat-status"|"kurocat-start"|"kurocat-stop"}` → KuroCat 桥接管理与探测；`{action:"test", kind}` → 预览气泡。
 - **固定状态持久化 + 随 DSH 自启**：`apply` 时读 `pinned.json`，若上次固定过则自动重新拉起伴生窗（DSH 重启后宠物自动回到桌面）。
 - **置顶小窗**（`companion.py`）：tkinter 无边框窗（`overrideredirect` + `-topmost`），品红色键控透明，加载 `pet-flat.png`（构建期 alpha 二值化预合成，避免键色混出紫边），轮询状态文件显示气泡；轮询命令文件响应退出指令（读后即清空，防重放）。宿主 spawn 前先清空命令文件，避免残留 quit 指令把新窗口秒杀。优先 `pythonw.exe` 启动（无控制台闪窗）。
 - **气泡交互**：气泡不自动消失；点小狗 = 把 DSH 主窗呼叫到前台（ctypes EnumWindows + SetForegroundWindow，区分点击与拖动）并消除气泡；新结果替换旧气泡内容。

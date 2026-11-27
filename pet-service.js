@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as kuroBridge from "./kurocat-bridge.js";
 
 const packageDir = dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +26,7 @@ export const name = "border-collie-pet-host";
 /** Service fields the function plugin touches: webServer for the RPC route, connection for the
  * trust fence. Task signals arrive as plain ctx.on emissions, so no other fields are needed. */
 export const inject = ["webServer", "connection"];
-export const BUILD = "v2-custom-image-2026-11-27";
+export const BUILD = "v3-kurocat-bridge-2026-11-27";
 
 const stateDir = join(packageDir, ".companion");
 const stateFile = join(stateDir, "state.json");
@@ -38,8 +39,16 @@ const CUSTOM_PET_FILE = join(stateDir, "pet-custom.png");
 // 上传上限：base64 数据 URL 解码后 8 MiB——足够任何合理图片，同时防止恶意超包。
 const CUSTOM_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 
-const DEFAULT_SETTINGS = { size: "large", sound: true, image: "default" };
+const DEFAULT_SETTINGS = {
+  size: "large", sound: true, image: "default",
+  // Pet mode: "collie" = built-in border collie (in-page + tkinter desktop window);
+  // "kurocat" = delegate the pet role to a locally running KuroCat (bridge forwards events).
+  petMode: "collie",
+  // KuroCat bridge: on by default (zero cost when KuroCat is not running), port 27420.
+  kurocat: true, kurocatPort: 27420, kurocatAutostart: false,
+};
 const VALID_SIZES = ["large", "medium", "small"];
+const VALID_PET_MODES = ["collie", "kurocat"];
 
 // Python discovery, in priority order. pythonw.exe first (no console flash), then python.exe.
 // Candidates cover: DSH's own bundled runtime (our primary case), PATH lookups, and the common
@@ -142,7 +151,13 @@ function readSettings() {
     // If "custom" is set but the file is gone, fall back to "default" so nothing breaks.
     let image = raw && raw.image === "custom" ? "custom" : "default";
     if (image === "custom" && !existsSync(CUSTOM_PET_FILE)) image = "default";
-    return { size, sound, image };
+    const petMode = VALID_PET_MODES.includes(raw && raw.petMode) ? raw.petMode : DEFAULT_SETTINGS.petMode;
+    const kurocat = typeof (raw && raw.kurocat) === "boolean" ? raw.kurocat : DEFAULT_SETTINGS.kurocat;
+    const kurocatPort = Number.isInteger(raw && raw.kurocatPort) && raw.kurocatPort > 0 && raw.kurocatPort < 65536
+      ? raw.kurocatPort : DEFAULT_SETTINGS.kurocatPort;
+    const kurocatAutostart = typeof (raw && raw.kurocatAutostart) === "boolean"
+      ? raw.kurocatAutostart : DEFAULT_SETTINGS.kurocatAutostart;
+    return { size, sound, image, petMode, kurocat, kurocatPort, kurocatAutostart };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
 
@@ -155,12 +170,24 @@ function writeSettings(patch) {
     image: patch && (patch.image === "custom" || patch.image === "default")
       ? (patch.image === "custom" && !existsSync(CUSTOM_PET_FILE) ? "default" : patch.image)
       : current.image,
+    petMode: patch && VALID_PET_MODES.includes(patch.petMode) ? patch.petMode : current.petMode,
+    kurocat: patch && typeof patch.kurocat === "boolean" ? patch.kurocat : current.kurocat,
+    kurocatPort: patch && Number.isInteger(patch.kurocatPort) && patch.kurocatPort > 0 && patch.kurocatPort < 65536
+      ? patch.kurocatPort : current.kurocatPort,
+    kurocatAutostart: patch && typeof patch.kurocatAutostart === "boolean"
+      ? patch.kurocatAutostart : current.kurocatAutostart,
   };
   try {
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(SETTINGS_FILE, JSON.stringify(next));
-    logLine("settings", { size: next.size, sound: next.sound, image: next.image });
+    logLine("settings", { size: next.size, sound: next.sound, image: next.image, petMode: next.petMode, kurocat: next.kurocat, kurocatPort: next.kurocatPort });
   } catch { /* ignore */ }
+  // Keep the bridge in sync with persisted settings (enabled flag, port, autostart).
+  kuroBridge.configure({
+    kurocat: next.kurocat,
+    kurocatPort: next.kurocatPort,
+    kurocatAutostart: next.kurocatAutostart,
+  });
   return next;
 }
 
@@ -313,6 +340,17 @@ function readBoundedBody(req, max = 12 * 1024 * 1024) {
 export function apply(ctx) {
   logLine("apply-ran", { build: BUILD });
 
+  // Sync the KuroCat bridge with persisted settings on every activation (port, enabled,
+  // autostart). Optional sidecar launch when petMode is kurocat + autostart is on.
+  {
+    const s = readSettings();
+    kuroBridge.configure({ kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart });
+    if (s.petMode === "kurocat" && s.kurocatAutostart) {
+      kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, reason: r.reason || "" }))
+        .catch(() => {});
+    }
+  }
+
   // Restore pin state from the previous run: if the user had pinned the pet, relaunch the
   // companion window when DSH starts (and again after every DSH restart).
   if (readPinnedFile()) {
@@ -320,32 +358,37 @@ export function apply(ctx) {
     if (result.ok) logLine("auto-pin-restored", {});
   }
 
-  // Task signals → companion window (only meaningful while pinned).
-  // Track running sessions per-agent so the status light stays on while ANY agent is working,
-  // and emit a completion bubble on EVERY agent end (even while others keep running).
-  // writeState replaces the whole file each call, so `active` and `runningEnd` must be written
-  // in the SAME call — two calls would overwrite each other.
+  // Task signals → companion window (only meaningful while pinned) + KuroCat bridge (when
+  // enabled and running). Track running sessions per-agent so the status light stays on while
+  // ANY agent is working, and emit a completion bubble on EVERY agent end (even while others
+  // keep running). writeState replaces the whole file each call, so `active` and `runningEnd`
+  // must be written in the SAME call — two calls would overwrite each other.
   ctx.on("agent/status", ({ agent, status }) => {
     if (!pinned) return;
     const id = agent && agent.id;
     if (status === "running") {
       if (id) runningSet.add(id);
+      if (runningSet.size === 1) kuroBridge.bridgeEvent("runningStart");
       writeState({ active: true });
     } else {
       if (id) runningSet.delete(id);
+      if (runningSet.size === 0) kuroBridge.bridgeEvent("runningEnd");
       writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
   });
   ctx.on("agent/error", ({ agent, error }) => {
     if (!pinned) return;
     const message = String((error && error.message) || "执行出错").slice(0, 60);
+    kuroBridge.bridgeEvent("fail", { message });
     writeState({ fail: { id: agent && agent.id, message } });
   });
   ctx.on("session/event", (session, event) => {
     if (!pinned) return;
     if (event.type === "tool/call" && event.data && event.data.name === "ask_user_question") {
+      kuroBridge.bridgeEvent("ask");
       writeState({ ask: { id: session.id } });
     } else if (event.type === "approval/asked") {
+      kuroBridge.bridgeEvent("ask");
       writeState({ ask: { id: session.id, tool: String((event.data && event.data.toolName) || "") } });
     } else if (event.type === "approval/decided") {
       writeState({ askDone: { id: session.id } });
@@ -408,6 +451,8 @@ export function apply(ctx) {
         sendJson(res, 200, {
           ok: true, pinned, companion: !!(companion && companion.exitCode === null),
           size: s.size, sound: s.sound, image: s.image,
+          petMode: s.petMode, kurocat: s.kurocat, kurocatPort: s.kurocatPort,
+          kurocatAutostart: s.kurocatAutostart,
           // Plugin version from package.json, shown in the settings page header.
           version: PLUGIN_VERSION,
           // True when a user-uploaded artwork exists and can be restored via settings.image.
@@ -416,6 +461,26 @@ export function apply(ctx) {
           python: !!resolvePython(),
           platform: process.platform,
         });
+        return;
+      }
+      if (action === "kurocat-status") {
+        // Probe KuroCat's /health and report bridge state for the settings page.
+        const s = readSettings();
+        kuroBridge.configure({ kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart });
+        const st = await kuroBridge.status();
+        sendJson(res, 200, { ok: true, ...st });
+        return;
+      }
+      if (action === "kurocat-start") {
+        // Sidecar launch: start KuroCat.exe when the user picks the KuroCat pet mode and
+        // enables autostart. Safe no-op when it is already running.
+        const r = await kuroBridge.startSidecar();
+        sendJson(res, 200, r);
+        return;
+      }
+      if (action === "kurocat-stop") {
+        kuroBridge.stopSidecar();
+        sendJson(res, 200, { ok: true });
         return;
       }
       if (action === "settings") {
@@ -437,7 +502,19 @@ export function apply(ctx) {
           sendJson(res, 400, { ok: false, error: "bad image" });
           return;
         }
+        if (Object.prototype.hasOwnProperty.call(value, "petMode")
+          && !VALID_PET_MODES.includes(value.petMode)) {
+          sendJson(res, 400, { ok: false, error: "bad petMode" });
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(value, "kurocatPort")
+          && !(Number.isInteger(value.kurocatPort) && value.kurocatPort > 0 && value.kurocatPort < 65536)) {
+          sendJson(res, 400, { ok: false, error: "bad kurocatPort" });
+          return;
+        }
         sendJson(res, 200, { ok: true, ...writeSettings(value) });
+        // Switching pet mode away from kurocat stops the sidecar we spawned (if any).
+        if (value && value.petMode === "collie") kuroBridge.stopSidecar();
         return;
       }
       if (action === "set-image") {
