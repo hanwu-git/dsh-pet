@@ -756,6 +756,108 @@ window.__ModuleLoader__.load({
       }, '\u{1F415}');
     }
 
+    // DSH-exit coordination for the KuroCat pet (v2.0): when the DSH webview is about to
+    // unload while the pet is running, ask the user whether to close it too. A remembered
+    // choice ("close" / "keep") is applied silently on later exits; null re-enables prompting.
+    function startExitCoordinator(ctx) {
+      let petOnlineByUs = false; // pet running and this DSH session should coordinate exit
+      let exitChoice = null;
+
+      const probe = () => {
+        rpc('kurocat-status').then((r) => {
+          if (r && r.ok !== false) {
+            petOnlineByUs = !!r.online;
+            exitChoice = r.exitChoice || null;
+          }
+        }).catch(() => {});
+      };
+      probe();
+      const timer = setInterval(probe, 8000);
+
+      // The visible question: a self-drawn overlay (not window.confirm, which the app shell
+      // blocks). Called from the pagehide path — we intercept BEFORE DSH closes so the user
+      // still sees UI. pagehide/beforeunload cannot block unload, so the real gate is the
+      // intercept click-capture: any in-page close (window close button, Ctrl+W handled by
+      // the shell) passes through a capture-phase listener that runs the prompt first when
+      // the pet is running and no choice has been remembered.
+      function askExitChoice() {
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;';
+          const box = document.createElement('div');
+          box.style.cssText = 'background:var(--dsh-bg,#fff);color:inherit;border-radius:12px;padding:20px 24px;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,0.35);font:14px/1.6 sans-serif;';
+          box.innerHTML = '<div style="font-weight:600;font-size:15px;margin-bottom:8px">🐱 宠物还在运行</div>'
+            + '<div style="opacity:0.75;margin-bottom:16px">关闭 DSH 时，是否也同步关闭 KuroCat 宠物？</div>';
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;';
+          const mkBtn = (label, primary, val) => {
+            const b = document.createElement('button');
+            b.textContent = label;
+            b.style.cssText = 'cursor:pointer;padding:7px 16px;border-radius:8px;font-size:13px;border:1px solid ' + (primary ? '#4f8ef7' : 'rgba(128,128,128,0.45)') + ';background:' + (primary ? 'rgba(79,142,247,0.15)' : 'transparent') + ';color:inherit;';
+            b.onclick = () => { document.body.removeChild(overlay); resolve(val); };
+            return b;
+          };
+          row.appendChild(mkBtn('本次保留', false, 'keep-once'));
+          row.appendChild(mkBtn('总是保留', false, 'keep'));
+          row.appendChild(mkBtn('同步关闭', true, 'close'));
+          box.appendChild(row);
+          overlay.appendChild(box);
+          document.body.appendChild(overlay);
+        });
+      }
+
+      async function applyChoice(val) {
+        if (val === 'keep-once') {
+          // Do not persist; pet keeps running; next exit asks again.
+          return;
+        }
+        try { await rpc('kurocat-exit-choice', { choice: val }); } catch (e) { /* best effort */ }
+      }
+
+      // Intercept in-page close gestures while the pet runs and no standing choice exists.
+      const onClickCapture = (e) => {
+        if (!petOnlineByUs || exitChoice) return;
+        const el = e.target.closest && e.target.closest(
+          '[data-close-dsh], .close-btn, [aria-label*="close" i], [title*="close" i]'
+        );
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+        askExitChoice().then(async (val) => {
+          await applyChoice(val);
+          if (val === 'close') {
+            // Pet already closed by the host; re-dispatch the original close path.
+            el.click();
+          }
+          // keep/keep-once: pet stays; re-dispatch so DSH still closes normally.
+          el.click();
+        });
+      };
+      document.addEventListener('click', onClickCapture, true);
+
+      const onBeforeUnload = () => {
+        // Safety net for exits that bypass click interception (Alt+F4 etc.): apply the
+        // remembered choice without prompting. sendBeacon survives unload.
+        if (!petOnlineByUs) return;
+        if (exitChoice === 'close') {
+          try {
+            navigator.sendBeacon(RPC_PATH, new Blob(
+              [JSON.stringify({ action: 'kurocat-exit-choice', choice: 'close' })],
+              { type: 'application/json' },
+            ));
+          } catch (err) { /* best effort */ }
+        }
+        // 'keep' or unanswered: pet intentionally outlives DSH.
+      };
+      window.addEventListener('beforeunload', onBeforeUnload);
+
+      ctx.effect(() => () => {
+        clearInterval(timer);
+        document.removeEventListener('click', onClickCapture, true);
+        window.removeEventListener('beforeunload', onBeforeUnload);
+      });
+    }
+
     let ctxRemote = null;
 
     // Poll the host for "navigate to session" requests queued by the desktop window.
@@ -784,6 +886,7 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctxRemote = ctx.remote;
         startNavigationPoller(ctx);
+        startExitCoordinator(ctx);
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay', id: 'border-collie-pet', order: 10,
         }, () => Pet({ ctxRemote })));

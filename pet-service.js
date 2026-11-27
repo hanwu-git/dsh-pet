@@ -72,6 +72,29 @@ const COMPANION = join(packageDir, "companion.py");
 // Pre-flattened against the #FF00FF key color (Pillow alpha_composite at build time): avoids the
 // purple fringe that tkinter's -transparentcolor live blending produces on semi-transparent edges.
 const PET_PNG = join(packageDir, "pet-flat.png");
+// Vendored pet exe (source/pet builds it). Preferred over the user-installed official
+// KuroCat; a release install would ship a prebuilt copy at the same relative spot.
+const EMBEDDED_PET_EXE = join(packageDir, "pet", "src-tauri", "target", "debug", "KuroCat.exe");
+// Win32 helper that brings the DSH main window to the foreground (same enumeration logic
+// as companion.py). Fired when a "waiting" event flows to the KuroCat pet, so the user is
+// pulled back to the conversation that needs them.
+const ACTIVATE_DSH_PS1 = join(packageDir, "activate-dsh.ps1");
+
+let lastActivateAt = 0;
+/** Bring DSH to the foreground (throttled to one call per 5s, fire-and-forget). */
+function activateDshWindow() {
+  const now = Date.now();
+  if (now - lastActivateAt < 5000) return;
+  lastActivateAt = now;
+  try {
+    const powershell = PYTHON_CANDIDATES.length >= 0 && (process.env.SystemRoot || "C:\\Windows");
+    void powershell;
+    spawn("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-File", ACTIVATE_DSH_PS1,
+    ], { detached: true, windowsHide: true, stdio: "ignore" }).unref();
+  } catch { /* best effort */ }
+}
 
 /** The artwork file to show RIGHT NOW: the user's custom image when settings say so and the
  * file exists, otherwise the bundled (key-color-flattened) border collie. Re-evaluated on every
@@ -355,6 +378,8 @@ export function apply(ctx) {
       kurocatPort: s.kurocatPort,
       kurocatAutostart: s.kurocatAutostart,
       dataDir: stateDir,
+      // Vendored exe preferred; bridge falls back to the official install when absent.
+      embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
     });
     // Attach to a running instance OR auto-start per settings; either way tracking begins.
     if (kuroMode) {
@@ -415,7 +440,15 @@ export function apply(ctx) {
   ctx.on("session/event", (session, event) => {
     const isAsk = (event.type === "tool/call" && event.data && event.data.name === "ask_user_question")
       || event.type === "approval/asked";
-    if (bridgeOn && isAsk) kuroBridge.bridgeEvent("ask");
+    if (bridgeOn && isAsk) {
+      kuroBridge.bridgeEvent("ask");
+      // Pull the user back: DSH main window to the front + queue navigation to the exact
+      // conversation (the client's take-navigation poll delivers it to openSession).
+      activateDshWindow();
+      if (session && session.id) {
+        pendingNavigation = { sessionId: String(session.id), t: Date.now() };
+      }
+    }
     if (!pinned) return;
     if (event.type === "tool/call" && event.data && event.data.name === "ask_user_question") {
       writeState({ ask: { id: session.id } });
@@ -495,11 +528,17 @@ export function apply(ctx) {
         return;
       }
       if (action === "kurocat-status") {
-        // Probe KuroCat's /health and report bridge state for the settings page.
+        // Probe the pet's /health and report bridge state for the settings page. The
+        // kurocat-status configure call needs the same embedded-exe preference as apply().
         const s = readSettings();
-        kuroBridge.configure({ kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart });
+        kuroBridge.configure({
+          kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart,
+          dataDir: stateDir,
+          embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
+        });
         const st = await kuroBridge.status();
-        sendJson(res, 200, { ok: true, ...st });
+        // Exit-choice is surfaced so the client knows whether to prompt at DSH exit.
+        sendJson(res, 200, { ok: true, ...st, exitChoice: kuroBridge.getExitChoice() });
         return;
       }
       if (action === "kurocat-start") {
@@ -520,8 +559,7 @@ export function apply(ctx) {
         // choice re-enables prompting (the settings page offers "ask every time").
         const choice = body && body.choice;
         if (choice === "close" || choice === "keep" || choice === null) {
-          if (choice) kuroBridge.rememberExitChoice(choice);
-          else kuroBridge.rememberExitChoice(null);
+          kuroBridge.rememberExitChoice(choice);
           if (choice === "close") kuroBridge.stopSidecar();
           sendJson(res, 200, { ok: true, choice: kuroBridge.getExitChoice() });
         } else {
