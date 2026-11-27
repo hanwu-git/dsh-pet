@@ -51,12 +51,14 @@
     "kurocat-bridge.js",
     "client.js",
     "companion.py",
+    "activate-dsh.ps1",
     "cordis.patch.yml",
     "locale/*.json",
     "docs",
     "icon.png",
     "pet.png",
     "pet-flat.png",
+    "pet-exe/KuroCat.exe",
     "README.md",
     "LICENSE"
   ]

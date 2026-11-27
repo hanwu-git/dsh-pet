@@ -72,16 +72,22 @@ const COMPANION = join(packageDir, "companion.py");
 // Pre-flattened against the #FF00FF key color (Pillow alpha_composite at build time): avoids the
 // purple fringe that tkinter's -transparentcolor live blending produces on semi-transparent edges.
 const PET_PNG = join(packageDir, "pet-flat.png");
-// Vendored pet exe (source/pet builds it). Preferred over the user-installed official
-// KuroCat; a release install would ship a prebuilt copy at the same relative spot.
-// RELEASE build is mandatory: a debug build loads its frontend from the devUrl
-// (http://localhost:1420) and fails with a WebView "cannot access page" when no dev
-// server is running. Release builds use the embedded frontendDist instead.
+// Vendored pet exe resolution order (RELEASE only — a debug build loads its frontend from
+// the devUrl (http://localhost:1420) and shows a WebView "cannot access page" without a
+// dev server; release builds embed frontendDist):
+// 1. packaged copy shipped with the plugin (pet-exe/KuroCat.exe) — present in installs
+//    from the plugin market, no Rust toolchain needed;
+// 2. local cargo output (pet/src-tauri/target/release/KuroCat.exe) — for source checkouts;
+// 3. local cargo debug output — development only;
+// 4. user-installed official KuroCat (kurocat-bridge's own candidates).
+const PACKAGED_PET_EXE = join(packageDir, "pet-exe", "KuroCat.exe");
 const EMBEDDED_PET_RELEASE_EXE = join(packageDir, "pet", "src-tauri", "target", "release", "KuroCat.exe");
 const EMBEDDED_PET_DEBUG_EXE = join(packageDir, "pet", "src-tauri", "target", "debug", "KuroCat.exe");
-const EMBEDDED_PET_EXE = existsSync(EMBEDDED_PET_RELEASE_EXE)
-  ? EMBEDDED_PET_RELEASE_EXE
-  : (existsSync(EMBEDDED_PET_DEBUG_EXE) ? EMBEDDED_PET_DEBUG_EXE : null);
+const EMBEDDED_PET_EXE = existsSync(PACKAGED_PET_EXE)
+  ? PACKAGED_PET_EXE
+  : (existsSync(EMBEDDED_PET_RELEASE_EXE)
+    ? EMBEDDED_PET_RELEASE_EXE
+    : (existsSync(EMBEDDED_PET_DEBUG_EXE) ? EMBEDDED_PET_DEBUG_EXE : null));
 // Win32 helper that brings the DSH main window to the foreground (same enumeration logic
 // as companion.py). Fired when a "waiting" event flows to the KuroCat pet, so the user is
 // pulled back to the conversation that needs them.
