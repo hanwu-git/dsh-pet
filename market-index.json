@@ -54,7 +54,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/hanwu-git/dsh-pet",
-            "commit": "PLACEHOLDER-FILLED-AFTER-PUSH"
+            "commit": "7a0d99a72d5278a2e48d27834a13d5b83e88a30b"
           },
           "engines": {
             "dsh": ">=0.2.0"
