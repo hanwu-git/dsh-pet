@@ -393,19 +393,9 @@ fn build_tray_menu(
             ],
         )?
     };
-    // dsh-pet v2.0: self-upgrade removed. The tray keeps a version item (disabled) instead
-    // of a check-update action so the menu layout is unchanged.
-    let check_update = MenuItem::with_id(
-        app,
-        "check_update",
-        tf(
-            lang,
-            "tray.check_update",
-            &[("ver", crate::updater::CURRENT_VERSION.to_string())],
-        ),
-        false, // disabled: no self-upgrade in the dsh-pet tree
-        None::<&str>,
-    )?;
+    // dsh-pet v2.0: the check-update tray item is REMOVED entirely (self-upgrade does not
+    // exist in this tree; upgrades come from the dsh-pet plugin market). Quit directly
+    // follows the separator now.
     let quit = MenuItem::with_id(app, "quit", t(lang, "tray.quit"), true, None::<&str>)?;
 
     let interact_menu = Submenu::with_items(
@@ -483,7 +473,6 @@ fn build_tray_menu(
             &obs_menu,
             &system_menu,
             &sep2,
-            &check_update,
             &quit,
         ],
     )?;
@@ -504,7 +493,6 @@ fn build_tray_menu(
             &obs_menu,
             &system_menu,
             &sep2,
-            &check_update,
             &quit,
         ],
     )?;
@@ -525,7 +513,6 @@ fn build_tray_menu(
             &obs_menu,
             &system_menu,
             &sep2,
-            &check_update,
             &quit,
         ],
     )?;
@@ -991,10 +978,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                 "mac_open_accessibility" => {
                     crate::input_hook::macos_hook::open_macos_privacy_pane("accessibility");
                 }
-                "check_update" => {
-                    // dsh-pet v2.0: self-upgrade removed. The (disabled) item cannot reach
-                    // this branch; kept as a no-op for safety.
-                }
+                // dsh-pet v2.0: "check_update" arm removed — the menu item no longer exists.
                 "reset_pos" => reset_window_position(app),
                 "quit" => {
                     shutdown_pet_windows();
