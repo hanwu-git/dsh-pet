@@ -363,32 +363,44 @@ export function apply(ctx) {
   // ANY agent is working, and emit a completion bubble on EVERY agent end (even while others
   // keep running). writeState replaces the whole file each call, so `active` and `runningEnd`
   // must be written in the SAME call — two calls would overwrite each other.
+  // Bridge gate is read once per activation: KuroCat forwarding follows its own setting and
+  // is deliberately decoupled from `pinned` — when the user delegates the pet role to
+  // KuroCat, events must flow without pinning the tkinter collie window.
+  const bridgeOn = readSettings().kurocat === true;
+
+  // Task signals → companion window (only meaningful while pinned) + KuroCat bridge (when
+  // enabled and running). Track running sessions per-agent so the status light stays on while
+  // ANY agent is working, and emit a completion bubble on EVERY agent end (even while others
+  // keep running). writeState replaces the whole file each call, so `active` and `runningEnd`
+  // must be written in the SAME call — two calls would overwrite each other.
   ctx.on("agent/status", ({ agent, status }) => {
-    if (!pinned) return;
     const id = agent && agent.id;
     if (status === "running") {
       if (id) runningSet.add(id);
-      if (runningSet.size === 1) kuroBridge.bridgeEvent("runningStart");
+      if (bridgeOn && runningSet.size === 1) kuroBridge.bridgeEvent("runningStart");
+      if (!pinned) return;
       writeState({ active: true });
     } else {
       if (id) runningSet.delete(id);
-      if (runningSet.size === 0) kuroBridge.bridgeEvent("runningEnd");
+      if (bridgeOn && runningSet.size === 0) kuroBridge.bridgeEvent("runningEnd");
+      if (!pinned) return;
       writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
   });
   ctx.on("agent/error", ({ agent, error }) => {
-    if (!pinned) return;
     const message = String((error && error.message) || "执行出错").slice(0, 60);
-    kuroBridge.bridgeEvent("fail", { message });
+    if (bridgeOn) kuroBridge.bridgeEvent("fail", { message });
+    if (!pinned) return;
     writeState({ fail: { id: agent && agent.id, message } });
   });
   ctx.on("session/event", (session, event) => {
+    const isAsk = (event.type === "tool/call" && event.data && event.data.name === "ask_user_question")
+      || event.type === "approval/asked";
+    if (bridgeOn && isAsk) kuroBridge.bridgeEvent("ask");
     if (!pinned) return;
     if (event.type === "tool/call" && event.data && event.data.name === "ask_user_question") {
-      kuroBridge.bridgeEvent("ask");
       writeState({ ask: { id: session.id } });
     } else if (event.type === "approval/asked") {
-      kuroBridge.bridgeEvent("ask");
       writeState({ ask: { id: session.id, tool: String((event.data && event.data.toolName) || "") } });
     } else if (event.type === "approval/decided") {
       writeState({ askDone: { id: session.id } });
