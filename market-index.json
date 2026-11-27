@@ -32,8 +32,8 @@
         "en": "Border Collie Pet"
       },
       "description": {
-        "zh": "一只住在桌面上的边牧，帮你盯着所有工作区的任务：跑完弹绿气泡、出错弹红气泡、等你确认弹黄气泡。固定后 DSH 最小化也不消失。",
-        "en": "A border collie on your desktop that watches every workspace: green bubble when tasks finish, red when they fail, yellow when they need your confirmation. Stays on top when DSH is minimized."
+        "zh": "一只住在桌面上的边牧，帮你盯着所有工作区的任务：跑完弹绿气泡、出错弹红气泡、等你确认弹黄气泡。固定后 DSH 最小化也不消失；0.5.0 起支持换成你自己的图片。",
+        "en": "A border collie on your desktop that watches every workspace: green bubble when tasks finish, red when they fail, yellow when they need your confirmation. Stays on top when DSH is minimized; since 0.5.0 you can swap in your own image."
       },
       "icon": "https://raw.githubusercontent.com/hanwu-git/dsh-pet/main/icon.png",
       "author": "Han Wu",
@@ -48,6 +48,18 @@
         "labels": ["desktop-pet", "notifications"]
       },
       "versions": [
+        {
+          "version": "0.5.0",
+          "publishTimestamp": 1795836000,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/hanwu-git/dsh-pet",
+            "commit": "PLACEHOLDER-FILLED-AFTER-PUSH"
+          },
+          "engines": {
+            "dsh": ">=0.2.0"
+          }
+        },
         {
           "version": "0.4.3",
           "publishTimestamp": 1795436433,

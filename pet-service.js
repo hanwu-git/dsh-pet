@@ -8,7 +8,7 @@
 // receive the raw ctx, so these subscriptions need no imports either.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,15 +18,20 @@ export const name = "border-collie-pet-host";
 /** Service fields the function plugin touches: webServer for the RPC route, connection for the
  * trust fence. Task signals arrive as plain ctx.on emissions, so no other fields are needed. */
 export const inject = ["webServer", "connection"];
-export const BUILD = "v1-pin-2026-11-22";
+export const BUILD = "v2-custom-image-2026-11-27";
 
 const stateDir = join(packageDir, ".companion");
 const stateFile = join(stateDir, "state.json");
 const cmdFile = join(stateDir, "cmd.json");
 const PIN_FILE = join(stateDir, "pinned.json");
 const SETTINGS_FILE = join(stateDir, "settings.json");
+// User-selected pet artwork (written via the set-image RPC). When present it replaces the
+// bundled border-collie art in BOTH the in-page pet and the desktop companion window.
+const CUSTOM_PET_FILE = join(stateDir, "pet-custom.png");
+// 上传上限：base64 数据 URL 解码后 8 MiB——足够任何合理图片，同时防止恶意超包。
+const CUSTOM_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 
-const DEFAULT_SETTINGS = { size: "large", sound: true };
+const DEFAULT_SETTINGS = { size: "large", sound: true, image: "default" };
 const VALID_SIZES = ["large", "medium", "small"];
 
 // Python discovery, in priority order. pythonw.exe first (no console flash), then python.exe.
@@ -51,6 +56,16 @@ const COMPANION = join(packageDir, "companion.py");
 // Pre-flattened against the #FF00FF key color (Pillow alpha_composite at build time): avoids the
 // purple fringe that tkinter's -transparentcolor live blending produces on semi-transparent edges.
 const PET_PNG = join(packageDir, "pet-flat.png");
+
+/** The artwork file to show RIGHT NOW: the user's custom image when settings say so and the
+ * file exists, otherwise the bundled (key-color-flattened) border collie. Re-evaluated on every
+ * companion launch, so a settings change + re-pin picks up the new art automatically. */
+function petArtFile() {
+  try {
+    if (readSettings().image === "custom" && existsSync(CUSTOM_PET_FILE)) return CUSTOM_PET_FILE;
+  } catch { /* ignore */ }
+  return PET_PNG;
+}
 
 /** Absolute first-hit, then bare names handed to the OS/PATH. Returns null when none exist. */
 function resolvePython() {
@@ -116,7 +131,11 @@ function readSettings() {
     const raw = JSON.parse(readFileSync(SETTINGS_FILE, "utf8"));
     const size = VALID_SIZES.includes(raw && raw.size) ? raw.size : DEFAULT_SETTINGS.size;
     const sound = typeof (raw && raw.sound) === "boolean" ? raw.sound : DEFAULT_SETTINGS.sound;
-    return { size, sound };
+    // image: "default" (bundled border collie) or "custom" (user-uploaded pet-custom.png).
+    // If "custom" is set but the file is gone, fall back to "default" so nothing breaks.
+    let image = raw && raw.image === "custom" ? "custom" : "default";
+    if (image === "custom" && !existsSync(CUSTOM_PET_FILE)) image = "default";
+    return { size, sound, image };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
 
@@ -126,13 +145,73 @@ function writeSettings(patch) {
   const next = {
     size: patch && VALID_SIZES.includes(patch.size) ? patch.size : current.size,
     sound: patch && typeof patch.sound === "boolean" ? patch.sound : current.sound,
+    image: patch && (patch.image === "custom" || patch.image === "default")
+      ? (patch.image === "custom" && !existsSync(CUSTOM_PET_FILE) ? "default" : patch.image)
+      : current.image,
   };
   try {
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(SETTINGS_FILE, JSON.stringify(next));
-    logLine("settings", { size: next.size, sound: next.sound });
+    logLine("settings", { size: next.size, sound: next.sound, image: next.image });
   } catch { /* ignore */ }
   return next;
+}
+
+// ---- custom pet image ------------------------------------------------------
+
+/** Persist a user-selected image as the pet artwork. Accepts a data URL
+ * (data:image/png;base64,... style, as produced by the settings page's FileReader) or a bare
+ * base64 string. The bytes are stored verbatim at .companion/pet-custom.png; BOTH surfaces
+ * (in-page <img> and the tkinter desktop window) read this file, so any browser-decodable
+ * format works for the page — but the desktop window needs PNG, so non-PNG input is rejected
+ * with an explicit error instead of silently breaking the pinned window. */
+function setCustomImage(dataUrl) {
+  const text = String(dataUrl || "");
+  const match = /^data:image\/([a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(text.trim());
+  let mime;
+  let base64;
+  if (match) {
+    mime = match[1].toLowerCase();
+    base64 = match[2];
+  } else if (/^[A-Za-z0-9+/=\s]+$/.test(text.trim()) && text.trim().length > 0) {
+    mime = "png";
+    base64 = text.trim();
+  } else {
+    return { ok: false, error: "image must be a base64 data URL" };
+  }
+  // The desktop companion window (tkinter.PhotoImage) can only decode PNG (and GIF), so the
+  // settings page converts whatever the user picked to PNG before uploading; reject anything
+  // else here so a JPEG can never leave the pinned window silently broken.
+  if (!["png", "x-png", "apng"].includes(mime)) {
+    return { ok: false, error: "only PNG images are supported (the page converts before upload)" };
+  }
+  let buffer;
+  try { buffer = Buffer.from(base64.replace(/\s+/g, ""), "base64"); } catch {
+    return { ok: false, error: "invalid base64 image data" };
+  }
+  if (buffer.length === 0) return { ok: false, error: "image data is empty" };
+  if (buffer.length > CUSTOM_IMAGE_MAX_BYTES) {
+    return { ok: false, error: "image too large (max 8 MiB)" };
+  }
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(CUSTOM_PET_FILE, buffer);
+    const settings = writeSettings({ image: "custom" });
+    logLine("set-image", { bytes: buffer.length });
+    return { ok: true, image: settings.image };
+  } catch (e) {
+    return { ok: false, error: "failed to save image" };
+  }
+}
+
+/** Remove the custom artwork and fall back to the bundled border collie. */
+function resetCustomImage() {
+  try {
+    if (existsSync(CUSTOM_PET_FILE)) unlinkSync(CUSTOM_PET_FILE);
+  } catch { /* ignore */ }
+  const settings = writeSettings({ image: "default" });
+  logLine("reset-image", {});
+  return { ok: true, image: settings.image };
 }
 
 function startCompanion() {
@@ -151,7 +230,7 @@ function startCompanion() {
     // Clear any stale command (e.g. a leftover quit from a previous run) BEFORE spawning:
     // the companion reads cmd.json on its first poll and would exit immediately otherwise.
     try { writeFileSync(cmdFile, ""); } catch { /* ignore */ }
-    companion = spawn(python, [COMPANION, stateFile, cmdFile, PET_PNG, String(ownerPid)], {
+    companion = spawn(python, [COMPANION, stateFile, cmdFile, petArtFile(), String(ownerPid)], {
       detached: true,
       windowsHide: true,
       stdio: "ignore",
@@ -207,7 +286,7 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-function readBoundedBody(req, max = 64 * 1024) {
+function readBoundedBody(req, max = 12 * 1024 * 1024) {
   return new Promise((resolve) => {
     const chunks = [];
     let size = 0;
@@ -320,7 +399,9 @@ export function apply(ctx) {
         const s = readSettings();
         sendJson(res, 200, {
           ok: true, pinned, companion: !!(companion && companion.exitCode === null),
-          size: s.size, sound: s.sound,
+          size: s.size, sound: s.sound, image: s.image,
+          // True when a user-uploaded artwork exists and can be restored via settings.image.
+          hasCustomImage: existsSync(CUSTOM_PET_FILE),
           // The settings UI and the pin tooltip explain a failed launch with this flag.
           python: !!resolvePython(),
           platform: process.platform,
@@ -341,7 +422,39 @@ export function apply(ctx) {
           sendJson(res, 400, { ok: false, error: "bad sound" });
           return;
         }
+        if (Object.prototype.hasOwnProperty.call(value, "image")
+          && !["default", "custom"].includes(value.image)) {
+          sendJson(res, 400, { ok: false, error: "bad image" });
+          return;
+        }
         sendJson(res, 200, { ok: true, ...writeSettings(value) });
+        return;
+      }
+      if (action === "set-image") {
+        // Upload a user-selected pet artwork (PNG data URL) and switch settings.image to it.
+        const value = body && body.value;
+        if (!value || typeof value !== "string") {
+          sendJson(res, 400, { ok: false, error: "value must be a data URL string" });
+          return;
+        }
+        sendJson(res, 200, setCustomImage(value));
+        return;
+      }
+      if (action === "reset-image") {
+        sendJson(res, 200, resetCustomImage());
+        return;
+      }
+      if (action === "get-image") {
+        if (!existsSync(CUSTOM_PET_FILE)) {
+          sendJson(res, 200, { ok: true, image: null });
+          return;
+        }
+        try {
+          const data = readFileSync(CUSTOM_PET_FILE).toString("base64");
+          sendJson(res, 200, { ok: true, image: "data:image/png;base64," + data });
+        } catch {
+          sendJson(res, 200, { ok: true, image: null });
+        }
         return;
       }
       if (action === "test") {

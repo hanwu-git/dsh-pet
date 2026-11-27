@@ -7,11 +7,27 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
 
-    // The pet artwork, embedded at build time from pet.png.
+    // The pet artwork, embedded at build time from pet.png. Used when the user has not
+    // uploaded a custom image (settings.image === 'default').
     const PET_IMG = '%PET_IMG%';
 
     const RPC_PATH = '/border-collie-pet/rpc';
     const PIN_KEY = 'border-collie-pet:pinned';
+    // Mirrors settings.image from the host; updated by the Pet widget polling the status RPC.
+    let currentImageMode = 'default';
+    let customImageUrl = null; // data URL of the uploaded image, fetched on demand
+
+    async function loadCustomImageUrl() {
+      if (customImageUrl) return customImageUrl;
+      const r = await rpc('get-image');
+      customImageUrl = (r && r.image) || null;
+      return customImageUrl;
+    }
+
+    async function resolvePetImage() {
+      if (currentImageMode !== 'custom') return PET_IMG;
+      return (await loadCustomImageUrl()) || PET_IMG;
+    }
 
     async function rpc(action, extra) {
       const res = await fetch(RPC_PATH, {
@@ -35,8 +51,12 @@ window.__ModuleLoader__.load({
     const ART_W = 300;
     const ART_H = 272;
     const HEAD_ROOM = 64;
-    const TOTAL_W = ART_W;
-    const TOTAL_H = ART_H + HEAD_ROOM;
+
+    /** Fit an image into the ART_W × ART_H box, preserving aspect ratio, without upscaling. */
+    function fitDimensions(w, hh) {
+      const scale = Math.min(1, ART_W / w, ART_H / hh);
+      return { w: Math.max(1, Math.round(w * scale)), hh: Math.max(1, Math.round(hh * scale)) };
+    }
 
     function PinButton({ pinned, busy, onClick }) {
       const colors = pinned
@@ -71,6 +91,44 @@ window.__ModuleLoader__.load({
       const [pinned, setPinned] = React.useState(readPinned);
       const [busy, setBusy] = React.useState(false);
       const [err, setErr] = React.useState('');
+
+      // Pet artwork: 'default' shows the embedded border collie; 'custom' shows the
+      // user-uploaded image. Poll status for changes made in the settings page.
+      const [petSrc, setPetSrc] = React.useState(PET_IMG);
+      const [petDim, setPetDim] = React.useState({ w: ART_W, hh: ART_H });
+      const imageModeRef = React.useRef('default');
+
+      React.useEffect(() => {
+        let stopped = false;
+        const check = async () => {
+          try {
+            const r = await rpc('status');
+            if (stopped || !r || r.ok === false) return;
+            const mode = r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default';
+            if (mode !== imageModeRef.current) {
+              imageModeRef.current = mode;
+              currentImageMode = mode;
+              const src = await resolvePetImage();
+              if (stopped) return;
+              if (src === PET_IMG) {
+                setPetSrc(PET_IMG);
+                setPetDim({ w: ART_W, hh: ART_H });
+              } else {
+                // Measure the uploaded image so it fits the box without distortion.
+                const probe = new Image();
+                probe.onload = () => {
+                  if (!stopped) setPetDim(fitDimensions(probe.naturalWidth, probe.naturalHeight));
+                };
+                probe.src = src;
+                setPetSrc(src);
+              }
+            }
+          } catch (e) { /* transient RPC failure; retry next tick */ }
+        };
+        check();
+        const timer = setInterval(check, 2000);
+        return () => { stopped = true; clearInterval(timer); };
+      }, []);
 
       // Session labels for friendlier bubbles (page mode) via forwarded remote events.
       const [notice, setNotice] = React.useState(null);
@@ -182,23 +240,24 @@ window.__ModuleLoader__.load({
           position: 'fixed',
           right: 24,
           bottom: 24,
-          width: TOTAL_W,
-          height: TOTAL_H,
+          width: petDim.w,
+          height: petDim.hh + HEAD_ROOM,
           zIndex: 2147483000,
           userSelect: 'none',
           pointerEvents: 'auto',
         },
       },
         h('img', {
-          src: PET_IMG,
-          alt: 'border collie',
+          src: petSrc,
+          alt: 'pet',
           draggable: false,
           style: {
             position: 'absolute',
             left: 0,
             top: HEAD_ROOM,
-            width: ART_W,
-            height: ART_H,
+            width: petDim.w,
+            height: petDim.hh,
+            objectFit: 'contain',
             pointerEvents: 'none',
             userSelect: 'none',
           },
@@ -266,6 +325,12 @@ window.__ModuleLoader__.load({
       const [err, setErr] = React.useState('');
       const [previewing, setPreviewing] = React.useState(null);
       const [previewMsg, setPreviewMsg] = React.useState(null);
+      // Pet image state: current mode from the host, preview of the picked file, upload msg.
+      const [imageMode, setImageMode] = React.useState('default');
+      const [hasCustom, setHasCustom] = React.useState(false);
+      const [uploading, setUploading] = React.useState(false);
+      const [imageMsg, setImageMsg] = React.useState(null); // {ok, text}
+      const [pickedPreview, setPickedPreview] = React.useState(null); // data URL being uploaded
 
       React.useEffect(() => {
         let cancelled = false;
@@ -273,6 +338,8 @@ window.__ModuleLoader__.load({
           if (cancelled || !r || r.ok === false) return;
           setSize(r.size || 'large');
           setSound(r.sound !== false);
+          setImageMode(r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default');
+          setHasCustom(!!r.hasCustomImage);
         }).catch(() => {});
         return () => { cancelled = true; };
       }, []);
@@ -292,6 +359,89 @@ window.__ModuleLoader__.load({
           setBusy(false);
         }
       }, [busy]);
+
+      // ---- pet image upload ----------------------------------------------------
+      // The desktop window (tkinter.PhotoImage) only decodes PNG/GIF, so ANY picked image is
+      // re-encoded to PNG here via a canvas before upload — JPEG/WebP uploads would break the
+      // pinned window. Large images are downscaled to at most 600px on the long side, which is
+      // far above the display size (300×272) and keeps the payload small.
+      const pickImage = React.useCallback(() => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          setImageMsg(null);
+          const reader = new FileReader();
+          reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+              const maxSide = 600;
+              const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+              const w = Math.max(1, Math.round(img.naturalWidth * scale));
+              const hh = Math.max(1, Math.round(img.naturalHeight * scale));
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = hh;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, hh);
+              const dataUrl = canvas.toDataURL('image/png');
+              setPickedPreview(dataUrl);
+            };
+            img.onerror = () => setImageMsg({ ok: false, text: '图片读取失败，请换一张试试' });
+            img.src = String(reader.result);
+          };
+          reader.onerror = () => setImageMsg({ ok: false, text: '文件读取失败' });
+          reader.readAsDataURL(file);
+        };
+        input.click();
+      }, []);
+
+      const uploadImage = React.useCallback(async () => {
+        if (!pickedPreview || uploading) return;
+        setUploading(true);
+        setImageMsg(null);
+        try {
+          const r = await rpc('set-image', { value: pickedPreview });
+          if (r && r.ok === false) {
+            setImageMsg({ ok: false, text: String(r.error || '上传失败') });
+          } else {
+            setImageMode('custom');
+            setHasCustom(true);
+            currentImageMode = 'custom';
+            customImageUrl = null; // refetch on next resolve
+            setImageMsg({ ok: true, text: '已更新宠物图片，页内宠物与桌面小窗都会切换' });
+            setPickedPreview(null);
+          }
+        } catch (e) {
+          setImageMsg({ ok: false, text: '上传失败：' + (e && e.message ? e.message : '请求不可用') });
+        } finally {
+          setUploading(false);
+        }
+      }, [pickedPreview, uploading]);
+
+      const resetImage = React.useCallback(async () => {
+        if (uploading) return;
+        setUploading(true);
+        setImageMsg(null);
+        try {
+          const r = await rpc('reset-image');
+          if (r && r.ok === false) {
+            setImageMsg({ ok: false, text: String(r.error || '恢复失败') });
+          } else {
+            setImageMode('default');
+            setHasCustom(false);
+            currentImageMode = 'default';
+            customImageUrl = null;
+            setImageMsg({ ok: true, text: '已恢复默认的边牧小狗' });
+            setPickedPreview(null);
+          }
+        } catch (e) {
+          setImageMsg({ ok: false, text: '恢复失败：' + (e && e.message ? e.message : '请求不可用') });
+        } finally {
+          setUploading(false);
+        }
+      }, [uploading]);
 
       // Audition a tone through the same path a real bubble uses, so what you hear here
       // is exactly what a task event will play.
@@ -325,7 +475,59 @@ window.__ModuleLoader__.load({
         h('div', null,
           h('h3', { style: { margin: '0 0 6px', fontSize: 16 } }, '桌面宠物'),
           h('p', { style: { margin: 0, fontSize: 13, opacity: 0.72 } },
-            '设置桌面小狗的显示尺寸与气泡提示音。修改后立即生效并自动保存。'),
+            '设置桌面宠物的图片、显示尺寸与气泡提示音。修改后立即生效并自动保存。'),
+        ),
+        h('div', null,
+          h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, '宠物图片'),
+          h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' } },
+            h('div', {
+              style: {
+                width: 72, height: 72, borderRadius: 10,
+                border: '1px solid rgba(128,128,128,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', flexShrink: 0,
+              },
+            },
+              pickedPreview
+                ? h('img', { src: pickedPreview, style: { maxWidth: '100%', maxHeight: '100%' }, alt: '预览' })
+                : h('span', { style: { fontSize: 34 } }, '\u{1F415}'),
+            ),
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+              h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+                h('button', {
+                  type: 'button', onClick: pickImage, disabled: uploading,
+                  style: {
+                    cursor: uploading ? 'wait' : 'pointer', padding: '6px 14px', borderRadius: 6,
+                    fontSize: 13, border: '1px solid rgba(128,128,128,0.45)',
+                    background: 'transparent', color: 'inherit',
+                  },
+                }, uploading ? '处理中…' : '选择图片…'),
+                imageMode === 'custom' || hasCustom ? h('button', {
+                  type: 'button', onClick: resetImage, disabled: uploading,
+                  style: {
+                    cursor: uploading ? 'wait' : 'pointer', padding: '6px 14px', borderRadius: 6,
+                    fontSize: 13, border: '1px solid rgba(128,128,128,0.45)',
+                    background: 'transparent', color: 'inherit',
+                  },
+                }, '恢复默认') : null,
+              ),
+              h('div', { style: { fontSize: 12, opacity: 0.7 } },
+                imageMode === 'custom'
+                  ? '当前使用自定义图片。任意格式都会自动转为 PNG 并缩放到合适尺寸。'
+                  : '当前使用默认的边牧小狗。选择你喜欢的图片（猫、狗、章鱼都可以）。'),
+              pickedPreview ? h('button', {
+                type: 'button', onClick: uploadImage, disabled: uploading,
+                style: {
+                  cursor: uploading ? 'wait' : 'pointer', padding: '6px 14px', borderRadius: 6,
+                  fontSize: 13, alignSelf: 'flex-start',
+                  border: '1px solid #4f8ef7', background: 'rgba(79,142,247,0.12)', color: 'inherit',
+                },
+              }, uploading ? '上传中…' : '应用这张图片') : null,
+              imageMsg ? h('div', {
+                style: { fontSize: 12, color: imageMsg.ok ? '#1e6b2f' : '#d9534f' },
+              }, imageMsg.text) : null,
+            ),
+          ),
         ),
         h('div', null,
           h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, '显示尺寸'),

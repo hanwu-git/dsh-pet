@@ -10,8 +10,10 @@ Bubbles PERSIST until dismissed: clicking the dog calls the DSH main window to
 the foreground and clears the bubble. A newer result replaces the previous
 bubble's content (newest wins, one bubble at a time).
 
-Size (large/medium/small) and bubble sound come from <state.json dir>/settings.json,
-written by the host RPC and polled here so changes take effect immediately.
+Size (large/medium/small), bubble sound, and pet image (default/custom) come
+from <state.json dir>/settings.json, written by the host RPC and polled here so
+changes take effect immediately — including switching to a user-uploaded image
+without restarting the window.
 
 The optional 5th argument is the host process pid that spawned this window. The orphan
 guard checks THAT pid, not state.json's `owner` (which a newer host overwrites).
@@ -31,6 +33,40 @@ PET_FILE = Path(sys.argv[3]) if len(sys.argv) > 3 else None
 # that re-reads state.json would see a live pid and wrongly believe it still has a host.
 OWNER_PID = int(sys.argv[4]) if len(sys.argv) > 4 and str(sys.argv[4]).isdigit() else 0
 
+# The bundled artwork (pet-flat.png) is pre-flattened against the key color at build time. A
+# USER-UPLOADED image usually has an alpha channel, which tkinter's key-color compositing would
+# blend live into purple fringes — so when Pillow is available, custom images are composited
+# onto the key color once at load time, the same way the build step prepared the bundled one.
+KEY_COLOR = (255, 0, 255)  # #FF00FF, same as the tkinter -transparentcolor below
+CUSTOM_FLAT_FILE = None  # set at runtime: flattened copy of the uploaded image
+
+
+def flatten_custom_image(src: Path) -> Path:
+    """Composite an RGBA image onto the magenta key color; returns the flattened path.
+
+    Falls back to the original file when Pillow is missing (page mode still works; the
+    desktop window may show fringes on semi-transparent edges, but nothing crashes).
+    """
+    global CUSTOM_FLAT_FILE
+    if CUSTOM_FLAT_FILE is not None and CUSTOM_FLAT_FILE.exists():
+        return CUSTOM_FLAT_FILE
+    out = src.with_name("pet-custom-flat.png")
+    try:
+        from PIL import Image
+        img = Image.open(src)
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            img = img.convert("RGBA")
+            bg = Image.new("RGBA", img.size, KEY_COLOR + (255,))
+            bg.alpha_composite(img)
+            img = bg.convert("RGB")
+        else:
+            img = img.convert("RGB")
+        img.save(out)
+        CUSTOM_FLAT_FILE = out
+        return out
+    except Exception:
+        return src
+
 POLL_MS = 400
 
 KINDS = {
@@ -41,6 +77,15 @@ KINDS = {
 
 # Size -> PhotoImage.subsample factor. medium = 1/2 side (1/4 area), small = 1/3 side (1/9 area).
 SIZE_TO_K = {"large": 1, "medium": 2, "small": 3}
+
+# Which artwork file each settings.image value maps to, resolved at read time: the flattened
+# custom image when the user uploaded one, otherwise the bundled key-color-flattened collie.
+def artwork_path_for(image_mode: str) -> Path:
+    if image_mode == "custom":
+        custom = STATE_FILE.parent / "pet-custom.png" if STATE_FILE else None
+        if custom and custom.exists():
+            return flatten_custom_image(custom)
+    return PET_FILE
 
 # Per-scale geometry of the bubble and the head room reserved above the dog.
 SCALES = {
@@ -156,6 +201,7 @@ class Companion(tk.Tk):
         self.current_bubble = None  # (kind, text) kept so a size change can redraw it
         self.settings_file = STATE_FILE.parent / "settings.json" if STATE_FILE else None
         self.settings_mtime = None
+        self.image_mode = "default"  # tracked so the settings poll can detect switches
 
         art_w = self.pet_full.width() if self.pet_full else 300
         art_h = self.pet_full.height() if self.pet_full else 272
@@ -244,7 +290,7 @@ class Companion(tk.Tk):
         self.set_active(self.active)
 
     def handle_settings(self):
-        """Poll settings.json; apply size/sound changes as soon as the file changes."""
+        """Poll settings.json; apply size/sound/image changes as soon as the file changes."""
         if not self.settings_file or not self.settings_file.exists():
             return
         try:
@@ -257,12 +303,51 @@ class Companion(tk.Tk):
         s = read_json(self.settings_file)
         size = s.get("size", "large")
         sound = s.get("sound", True)
+        image = s.get("image", "default")
         if not isinstance(sound, bool):
             sound = True
         k = SIZE_TO_K.get(size, 1)
         if k != self.scale:
             self.apply_size(k)
         self.sound_on = sound
+        if image != self.image_mode:
+            self.set_image_mode(image)
+
+    def set_image_mode(self, mode):
+        """Switch between the bundled collie and a user-uploaded image at runtime.
+
+        Resizes the window to the new artwork's dimensions, keeps the top-left corner fixed,
+        and re-asserts the color key — the same drill apply_size() goes through.
+        """
+        path = artwork_path_for(mode)
+        if not path or not path.exists():
+            return
+        try:
+            new_full = tk.PhotoImage(file=str(path))
+        except Exception:
+            # Unreadable/undecodable file: keep whatever is on screen rather than crash.
+            return
+        sx, sy = self.winfo_rootx(), self.winfo_rooty()
+        bubble = self.current_bubble
+        self.clear_bubble()
+        self.pet_full = new_full
+        self.image_mode = mode
+        self.scale = 1
+        self.scale_cfg = SCALES[1]
+        self.build_pet_image()
+        self.bind_pet_events()
+        self.update_idletasks()
+        self.geometry(f"{self.total_w}x{self.total_h}+{sx}+{sy}")
+        try:
+            self.attributes("-transparentcolor", "#FF00FF")
+            self.configure(bg="#FF00FF")
+            self.canvas.configure(bg="#FF00FF")
+        except Exception:
+            pass
+        if bubble:
+            self.show_bubble(bubble[0], bubble[1], bubble[2] if len(bubble) > 2 else None,
+                             play_sound=False)
+        self.set_active(self.active)
 
     def position_default(self):
         sw = self.winfo_screenwidth()
