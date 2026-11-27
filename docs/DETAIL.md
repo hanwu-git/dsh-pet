@@ -4,9 +4,10 @@
 
 ## 功能
 
-### KuroCat 外挂形象（0.6.0 新增）
+### KuroCat 外挂形象（0.6.0 新增，0.6.1 互斥完善）
 
 - `settings.json` 新增 `petMode`（`collie` | `kurocat`）、`kurocat`（桥开关，默认开）、`kurocatPort`（默认 27420）、`kurocatAutostart`。
+- **互斥语义（0.6.1）**：选择 kurocat 形象时，内置边牧的全部出口关闭——页内 widget 整个不渲染（`delegated` 早退）、固定中的 tkinter 窗立即停掉并写 `pinned.json=false`（防止下次重启复活）、DSH 启动时不再自动恢复固定窗；任务监控完全由桥转发给 KuroCat。切回 collie 时 sidecar 停止、固定窗恢复原逻辑。
 - **桥接模块**（`kurocat-bridge.js`）：每次转发前 `GET /health`（250ms 超时）探测本机 KuroCat；不在线则静默跳过。事件经 500ms 窗口合并（last-wins），只 POST 最后一条到 `POST /hook`。
 - **事件映射**：`runningStart`→`working`（敲键盘）、`runningEnd`→`done`、`fail`→`error`（附原因）、`ask`→`waiting`；`source` 固定 `"DSH"`。桥接事件只在 `runningSet` 空变非空 / 非空变空的边界触发，避免并发闪烁。
 - **接线点**（`pet-service.js`）：`agent/status`（首任务开始 / 全部结束）、`agent/error`、`session/event`（ask_user_question / approval/asked）各加一行 `kuroBridge.bridgeEvent(...)`，与 `writeState` 同步触发，且**不受 pinned 限制以外的新条件影响**（仍沿用 `if (!pinned) return` 既有门槛）。

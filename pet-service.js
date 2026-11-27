@@ -341,19 +341,29 @@ export function apply(ctx) {
   logLine("apply-ran", { build: BUILD });
 
   // Sync the KuroCat bridge with persisted settings on every activation (port, enabled,
-  // autostart). Optional sidecar launch when petMode is kurocat + autostart is on.
+  // autostart). In kurocat mode the collie surfaces are OFF: the pinned desktop window is
+  // never restored and any stale one is stopped; optional sidecar launch when autostart is on.
+  let kuroMode = false;
   {
     const s = readSettings();
+    kuroMode = s.petMode === "kurocat";
     kuroBridge.configure({ kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart });
-    if (s.petMode === "kurocat" && s.kurocatAutostart) {
+    if (kuroMode && s.kurocatAutostart) {
       kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, reason: r.reason || "" }))
         .catch(() => {});
     }
   }
 
   // Restore pin state from the previous run: if the user had pinned the pet, relaunch the
-  // companion window when DSH starts (and again after every DSH restart).
-  if (readPinnedFile()) {
+  // companion window when DSH starts (and again after every DSH restart). Skipped in kurocat
+  // mode — the collie desktop window must stay closed there. Also writes pinned.json=false so
+  // the flag cannot silently resurrect the window on the NEXT restart either.
+  if (kuroMode) {
+    if (readPinnedFile()) {
+      setPinned(false);
+      logLine("auto-pin-suppressed-kurocat", {});
+    }
+  } else if (readPinnedFile()) {
     const result = setPinned(true);
     if (result.ok) logLine("auto-pin-restored", {});
   }
@@ -525,8 +535,14 @@ export function apply(ctx) {
           return;
         }
         sendJson(res, 200, { ok: true, ...writeSettings(value) });
-        // Switching pet mode away from kurocat stops the sidecar we spawned (if any).
-        if (value && value.petMode === "collie") kuroBridge.stopSidecar();
+        // Pet-mode switch owns the collie surfaces: kurocat stops the pinned desktop window
+        // (unpin + quit companion); collie clears the flag so the page re-shows the widget.
+        if (value && value.petMode === "kurocat") {
+          if (pinned) setPinned(false);
+          kuroBridge.startSidecar().catch(() => {});
+        } else if (value && value.petMode === "collie") {
+          kuroBridge.stopSidecar();
+        }
         return;
       }
       if (action === "set-image") {

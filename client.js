@@ -91,6 +91,9 @@ window.__ModuleLoader__.load({
       const [pinned, setPinned] = React.useState(readPinned);
       const [busy, setBusy] = React.useState(false);
       const [err, setErr] = React.useState('');
+      // When the user delegates the pet role to KuroCat, the whole in-page collie (widget,
+      // pin button, bubbles) must disappear — KuroCat is the only pet on screen then.
+      const [delegated, setDelegated] = React.useState(false);
 
       // Pet artwork: 'default' shows the embedded border collie; 'custom' shows the
       // user-uploaded image. Poll status for changes made in the settings page.
@@ -104,6 +107,7 @@ window.__ModuleLoader__.load({
           try {
             const r = await rpc('status');
             if (stopped || !r || r.ok === false) return;
+            setDelegated(r.petMode === 'kurocat');
             const mode = r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default';
             if (mode !== imageModeRef.current) {
               imageModeRef.current = mode;
@@ -200,6 +204,10 @@ window.__ModuleLoader__.load({
           setBusy(false);
         }
       }, [pinned, busy]);
+
+      // KuroCat mode: the collie cedes the screen entirely — no widget, no pin button,
+      // no bubbles. KuroCat (external window) is the only pet while this mode is active.
+      if (delegated) return null;
 
       if (pinned) {
         // Desktop companion is active; the in-page pet hides to avoid duplication.
@@ -553,7 +561,7 @@ window.__ModuleLoader__.load({
           h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
             [
               { value: 'collie', label: '🐕 边牧（内置）', desc: '页内宠物 + 桌面固定小窗，支持自定义图片' },
-              { value: 'kurocat', label: '🐱 KuroCat（外挂）', desc: '桌面打字小黑猫，任务联动 + 敲键盘动画，需本机安装 KuroCat' },
+              { value: 'kurocat', label: '🐱 KuroCat（外挂）', desc: '关闭内置宠物，监控交给桌面打字小黑猫（需本机安装 KuroCat）' },
             ].map(o => h('button', {
               key: o.value,
               type: 'button',
