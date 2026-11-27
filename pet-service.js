@@ -48,7 +48,7 @@ const DEFAULT_SETTINGS = {
   kurocat: true, kurocatPort: 27420, kurocatAutostart: false,
 };
 const VALID_SIZES = ["large", "medium", "small"];
-const VALID_PET_MODES = ["collie", "kurocat"];
+const VALID_PET_MODES = ["collie", "kurocat", "kurocat-external"];
 
 // Python discovery, in priority order. pythonw.exe first (no console flash), then python.exe.
 // Candidates cover: DSH's own bundled runtime (our primary case), PATH lookups, and the common
@@ -74,7 +74,14 @@ const COMPANION = join(packageDir, "companion.py");
 const PET_PNG = join(packageDir, "pet-flat.png");
 // Vendored pet exe (source/pet builds it). Preferred over the user-installed official
 // KuroCat; a release install would ship a prebuilt copy at the same relative spot.
-const EMBEDDED_PET_EXE = join(packageDir, "pet", "src-tauri", "target", "debug", "KuroCat.exe");
+// RELEASE build is mandatory: a debug build loads its frontend from the devUrl
+// (http://localhost:1420) and fails with a WebView "cannot access page" when no dev
+// server is running. Release builds use the embedded frontendDist instead.
+const EMBEDDED_PET_RELEASE_EXE = join(packageDir, "pet", "src-tauri", "target", "release", "KuroCat.exe");
+const EMBEDDED_PET_DEBUG_EXE = join(packageDir, "pet", "src-tauri", "target", "debug", "KuroCat.exe");
+const EMBEDDED_PET_EXE = existsSync(EMBEDDED_PET_RELEASE_EXE)
+  ? EMBEDDED_PET_RELEASE_EXE
+  : (existsSync(EMBEDDED_PET_DEBUG_EXE) ? EMBEDDED_PET_DEBUG_EXE : null);
 // Win32 helper that brings the DSH main window to the foreground (same enumeration logic
 // as companion.py). Fired when a "waiting" event flows to the KuroCat pet, so the user is
 // pulled back to the conversation that needs them.
@@ -210,7 +217,22 @@ function writeSettings(patch) {
     kurocat: next.kurocat,
     kurocatPort: next.kurocatPort,
     kurocatAutostart: next.kurocatAutostart,
+    dataDir: stateDir,
+    embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
   });
+  // Pet-mode switch: kurocat starts/attaches the pet; collie only stops a pet WE
+  // spawned (an adopted/standalone instance is left running — the user owns it).
+  if (patch && patch.petMode === "kurocat") {
+    if (pinned) setPinned(false);
+    kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, adopted: !!r.adopted, reason: r.reason || "" })).catch(() => {});
+  } else if (patch && patch.petMode === "collie") {
+    kuroBridge.stopSidecar();
+  }
+  // Legacy port migration: settings written by 0.6.x carry 27420 (official range); the
+  // embedded build lives on 27430+. Rewrite once so the bridge knocks on the right door.
+  if (next.petMode === "kurocat" && next.kurocatPort === 27420 && existsSync(EMBEDDED_PET_EXE)) {
+    return writeSettings({ kurocatPort: 27430 });
+  }
   return next;
 }
 
@@ -596,15 +618,9 @@ export function apply(ctx) {
           sendJson(res, 400, { ok: false, error: "bad kurocatPort" });
           return;
         }
+        // Side effects now live inside writeSettings (so they also fire on apply-time
+        // migrations); the RPC just returns the effective settings.
         sendJson(res, 200, { ok: true, ...writeSettings(value) });
-        // Pet-mode switch: kurocat starts/attaches the pet; collie only stops a pet WE
-        // spawned (an adopted/standalone instance is left running — the user owns it).
-        if (value && value.petMode === "kurocat") {
-          if (pinned) setPinned(false);
-          kuroBridge.startSidecar().catch(() => {});
-        } else if (value && value.petMode === "collie") {
-          kuroBridge.stopSidecar();
-        }
         return;
       }
       if (action === "set-image") {
