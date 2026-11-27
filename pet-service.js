@@ -48,7 +48,7 @@ const DEFAULT_SETTINGS = {
   kurocat: true, kurocatPort: 27420, kurocatAutostart: false,
 };
 const VALID_SIZES = ["large", "medium", "small"];
-const VALID_PET_MODES = ["collie", "kurocat", "kurocat-external"];
+const VALID_PET_MODES = ["collie", "kurocat"];
 
 // Python discovery, in priority order. pythonw.exe first (no console flash), then python.exe.
 // Candidates cover: DSH's own bundled runtime (our primary case), PATH lookups, and the common
@@ -181,7 +181,9 @@ function readSettings() {
     // If "custom" is set but the file is gone, fall back to "default" so nothing breaks.
     let image = raw && raw.image === "custom" ? "custom" : "default";
     if (image === "custom" && !existsSync(CUSTOM_PET_FILE)) image = "default";
-    const petMode = VALID_PET_MODES.includes(raw && raw.petMode) ? raw.petMode : DEFAULT_SETTINGS.petMode;
+    const petMode = raw && (raw.petMode === "kurocat" || raw.petMode === "kurocat-external")
+      ? "kurocat" // legacy external mode collapses into the embedded mode (external removed in 2.0.1)
+      : (VALID_PET_MODES.includes(raw && raw.petMode) ? raw.petMode : DEFAULT_SETTINGS.petMode);
     const kurocat = typeof (raw && raw.kurocat) === "boolean" ? raw.kurocat : DEFAULT_SETTINGS.kurocat;
     const kurocatPort = Number.isInteger(raw && raw.kurocatPort) && raw.kurocatPort > 0 && raw.kurocatPort < 65536
       ? raw.kurocatPort : DEFAULT_SETTINGS.kurocatPort;
