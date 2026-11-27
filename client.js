@@ -331,6 +331,7 @@ window.__ModuleLoader__.load({
       const [uploading, setUploading] = React.useState(false);
       const [imageMsg, setImageMsg] = React.useState(null); // {ok, text}
       const [pickedPreview, setPickedPreview] = React.useState(null); // data URL being uploaded
+      const [version, setVersion] = React.useState('');
 
       React.useEffect(() => {
         let cancelled = false;
@@ -340,6 +341,7 @@ window.__ModuleLoader__.load({
           setSound(r.sound !== false);
           setImageMode(r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default');
           setHasCustom(!!r.hasCustomImage);
+          setVersion(r.version || '');
         }).catch(() => {});
         return () => { cancelled = true; };
       }, []);
@@ -410,7 +412,7 @@ window.__ModuleLoader__.load({
             setHasCustom(true);
             currentImageMode = 'custom';
             customImageUrl = null; // refetch on next resolve
-            setImageMsg({ ok: true, text: '已更新宠物图片，页内宠物与桌面小窗都会切换' });
+            setImageMsg({ ok: true, text: '已更新宠物图片（已复制到插件目录），页内宠物与桌面小窗都会切换' });
             setPickedPreview(null);
           }
         } catch (e) {
@@ -473,7 +475,16 @@ window.__ModuleLoader__.load({
         style: { maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 18, padding: '8px 0' },
       },
         h('div', null,
-          h('h3', { style: { margin: '0 0 6px', fontSize: 16 } }, '桌面宠物'),
+          h('h3', { style: { margin: '0 0 6px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', null, '桌面宠物'),
+            version ? h('span', {
+              style: {
+                fontSize: 11, fontWeight: 500, opacity: 0.65,
+                padding: '2px 8px', borderRadius: 10,
+                border: '1px solid rgba(128,128,128,0.4)',
+              },
+            }, 'v' + version) : null,
+          ),
           h('p', { style: { margin: 0, fontSize: 13, opacity: 0.72 } },
             '设置桌面宠物的图片、显示尺寸与气泡提示音。修改后立即生效并自动保存。'),
         ),
@@ -513,8 +524,8 @@ window.__ModuleLoader__.load({
               ),
               h('div', { style: { fontSize: 12, opacity: 0.7 } },
                 imageMode === 'custom'
-                  ? '当前使用自定义图片。任意格式都会自动转为 PNG 并缩放到合适尺寸。'
-                  : '当前使用默认的边牧小狗。选择你喜欢的图片（猫、狗、章鱼都可以）。'),
+                  ? '当前使用自定义图片。图片已复制到插件目录，删除或移动原文件不影响显示。'
+                  : '当前使用默认的边牧小狗。选择你喜欢的图片（猫、狗、章鱼都可以），图片会复制进插件目录，之后删原文件也不影响。'),
               pickedPreview ? h('button', {
                 type: 'button', onClick: uploadImage, disabled: uploading,
                 style: {

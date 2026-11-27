@@ -14,6 +14,13 @@ import { fileURLToPath } from "node:url";
 
 const packageDir = dirname(fileURLToPath(import.meta.url));
 
+// Plugin version, read once from package.json and surfaced through the status RPC so the
+// settings page can display it without duplicating the number in two places.
+let PLUGIN_VERSION = "0.0.0";
+try {
+  PLUGIN_VERSION = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")).version || PLUGIN_VERSION;
+} catch { /* keep fallback */ }
+
 export const name = "border-collie-pet-host";
 /** Service fields the function plugin touches: webServer for the RPC route, connection for the
  * trust fence. Task signals arrive as plain ctx.on emissions, so no other fields are needed. */
@@ -161,10 +168,11 @@ function writeSettings(patch) {
 
 /** Persist a user-selected image as the pet artwork. Accepts a data URL
  * (data:image/png;base64,... style, as produced by the settings page's FileReader) or a bare
- * base64 string. The bytes are stored verbatim at .companion/pet-custom.png; BOTH surfaces
- * (in-page <img> and the tkinter desktop window) read this file, so any browser-decodable
- * format works for the page — but the desktop window needs PNG, so non-PNG input is rejected
- * with an explicit error instead of silently breaking the pinned window. */
+ * base64 string. The bytes are COPIED into .companion/pet-custom.png inside the plugin
+ * directory — the original file the user picked is never referenced afterwards, so deleting
+ * or moving it can never break the pet. Both surfaces (in-page <img> and the tkinter desktop
+ * window) read this copied file. Non-PNG input is rejected with an explicit error instead of
+ * silently breaking the pinned window. */
 function setCustomImage(dataUrl) {
   const text = String(dataUrl || "");
   const match = /^data:image\/([a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(text.trim());
@@ -400,6 +408,8 @@ export function apply(ctx) {
         sendJson(res, 200, {
           ok: true, pinned, companion: !!(companion && companion.exitCode === null),
           size: s.size, sound: s.sound, image: s.image,
+          // Plugin version from package.json, shown in the settings page header.
+          version: PLUGIN_VERSION,
           // True when a user-uploaded artwork exists and can be restored via settings.image.
           hasCustomImage: existsSync(CUSTOM_PET_FILE),
           // The settings UI and the pin tooltip explain a failed launch with this flag.

@@ -49,6 +49,18 @@
       },
       "versions": [
         {
+          "version": "0.5.1",
+          "publishTimestamp": 1795840200,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/hanwu-git/dsh-pet",
+            "commit": "PLACEHOLDER-FILLED-AFTER-PUSH"
+          },
+          "engines": {
+            "dsh": ">=0.2.0"
+          }
+        },
+        {
           "version": "0.5.0",
           "publishTimestamp": 1795836000,
           "source": {
