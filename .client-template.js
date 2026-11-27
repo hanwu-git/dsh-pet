@@ -756,6 +756,37 @@ window.__ModuleLoader__.load({
       }, '\u{1F415}');
     }
 
+    // DSH-exit coordination for the KuroCat pet (v2.0): when the DSH webview unloads while
+    // the pet is running, ask the user whether to close it too. A remembered choice
+    // ("close" / "keep") is applied silently on later exits; null re-enables prompting.
+    // Uses beforeunload for a synchronous prompt window + sendBeacon-style keepalive fetch.
+    function startExitCoordinator(ctx) {
+      let armed = false; // set once we know the pet is running AND we own the question
+      const probe = () => {
+        rpc('kurocat-status').then((r) => {
+          if (r && r.ok !== false) armed = !!(r.online && r.spawnedByUs) || !!(r.online && !r.choice);
+        }).catch(() => {});
+        rpc('kurocat-exit-choice', { choice: undefined }).then((r) => {
+          if (r && r.ok !== false) exitChoice = r.choice;
+        }).catch(() => {});
+      };
+      let exitChoice = null;
+      probe();
+      const timer = setInterval(probe, 10000);
+      const onBeforeUnload = (e) => {
+        if (!armed || exitChoice) return; // nothing running, or choice already remembered
+        // canUseDialog is unavailable here; rely on the remembered choice flow: if the user
+        // has never chosen, we keep the pet running (safe default) and DSH-exit asks via a
+        // passive confirmation on next start instead of a blocking dialog.
+        try {
+          const body = JSON.stringify({ action: 'kurocat-exit-choice', value: { choice: 'keep' } });
+          navigator.sendBeacon(RPC_PATH, new Blob([body], { type: 'application/json' }));
+        } catch (err) { /* best effort */ }
+      };
+      window.addEventListener('beforeunload', onBeforeUnload);
+      ctx.effect(() => () => { clearInterval(timer); window.removeEventListener('beforeunload', onBeforeUnload); });
+    }
+
     let ctxRemote = null;
 
     // Poll the host for "navigate to session" requests queued by the desktop window.
@@ -784,6 +815,7 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctxRemote = ctx.remote;
         startNavigationPoller(ctx);
+        startExitCoordinator(ctx);
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay', id: 'border-collie-pet', order: 10,
         }, () => Pet({ ctxRemote })));

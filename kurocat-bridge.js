@@ -14,10 +14,13 @@
 
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DEFAULT_PORT = 27420;
+// dsh-pet v2.0: the vendored pet uses the 27430+ range so a user-installed official
+// KuroCat (27420) can coexist. `dataDir` is injected by the host for persistence.
+const EMBEDDED_PORT_BASE = 27430;
 // KuroCat NSIS install location (per-user first, then system-wide). Only used for the
 // optional sidecar autostart; plain forwarding does not need the exe at all.
 const KURO_EXE_CANDIDATES = [
@@ -29,12 +32,23 @@ let state = {
   enabled: true,
   port: DEFAULT_PORT,
   autostart: false,
+  dataDir: null,
 };
 
 let sidecarProc = null;
 // Event coalescing: the latest payload per kind wins; a single timer flushes them together.
 const pending = new Map();
 let flushTimer = null;
+
+/** Find a free port starting at `base` (TCP bind probe, immediately released). */
+function findFreePort(base) {
+  return new Promise((resolve) => {
+    const srv = http.createServer();
+    srv.once("error", () => resolve(findFreePort(base + 1)));
+    srv.once("listening", () => { const port = srv.address().port; srv.close(() => resolve(port)); });
+    srv.listen(base, "127.0.0.1");
+  });
+}
 
 function kuroExe() {
   for (const p of KURO_EXE_CANDIDATES) {
@@ -80,6 +94,10 @@ export function configure(patch) {
     state.port = patch.kurocatPort;
   }
   if (typeof patch.kurocatAutostart === "boolean") state.autostart = patch.kurocatAutostart;
+  if (typeof patch.dataDir === "string" && patch.dataDir) state.dataDir = patch.dataDir;
+  if (typeof patch.embeddedExe === "string" && patch.embeddedExe && existsSync(patch.embeddedExe)) {
+    state.embeddedExe = patch.embeddedExe;
+  }
   return { ...state };
 }
 
@@ -116,29 +134,45 @@ async function flush() {
 
 // ---- optional sidecar lifecycle ---------------------------------------------
 
-/** Start KuroCat.exe if configured and not already running. Returns {ok, reason?}. */
+/** Start the pet exactly ONCE per machine. Order of preference:
+ * 1. Anything already answering on the configured port (official OR embedded) → adopt it.
+ * 2. The vendored embedded exe (state.embeddedExe) on a free 27430+ port.
+ * 3. The user-installed official KuroCat.exe.
+ * The spawned process is detached: it can outlive DSH (standalone mode) — termination is
+ * the user's explicit choice at DSH exit, not an automatic kill. */
 export async function startSidecar() {
   if (!state.enabled) return { ok: false, reason: "bridge disabled" };
-  if (sidecarProc && sidecarProc.exitCode === null) return { ok: true };
-  const exe = kuroExe();
-  if (!exe) return { ok: false, reason: "KuroCat.exe not found" };
-  if (await probe(state.port)) return { ok: true }; // already running independently
-  try {
-    sidecarProc = spawn(exe, [], { detached: true, windowsHide: false, stdio: "ignore" });
-    sidecarProc.unref();
-    // Give it a moment to bind the port before the first event arrives.
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 400));
-      if (await probe(state.port)) return { ok: true };
-    }
-    return { ok: false, reason: "started but port not ready" };
-  } catch {
-    sidecarProc = null;
-    return { ok: false, reason: "spawn failed" };
+  if (sidecarProc && sidecarProc.exitCode === null) return { ok: true, adopted: false };
+  // Single-instance: adopt anything already listening on our port.
+  if (await probe(state.port)) return { ok: true, adopted: true };
+  const candidates = [];
+  if (state.embeddedExe) candidates.push(state.embeddedExe);
+  const official = kuroExe();
+  if (official) candidates.push(official);
+  if (candidates.length === 0) return { ok: false, reason: "no pet exe found" };
+  const port = await findFreePort(EMBEDDED_PORT_BASE);
+  for (const exe of candidates) {
+    try {
+      sidecarProc = spawn(exe, ["--dsh-port", String(port)], {
+        detached: true,
+        windowsHide: false,
+        stdio: "ignore",
+      });
+      sidecarProc.unref();
+      state.port = port;
+      // Wait up to 6s for the pet to bind its port.
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (await probe(state.port)) return { ok: true, adopted: false, exe, port };
+      }
+    } catch { /* try next candidate */ }
   }
+  sidecarProc = null;
+  return { ok: false, reason: "spawn failed or port never became ready" };
 }
 
-/** Ask a locally running KuroCat to quit via taskkill (it has no documented quit endpoint). */
+/** Terminate the pet process we spawned (only when the user chose "close" at DSH exit,
+ * or an explicit stop is requested). An adopted instance is never killed from here. */
 export function stopSidecar() {
   if (sidecarProc && sidecarProc.exitCode === null) {
     try { sidecarProc.kill(); } catch { /* ignore */ }
@@ -155,5 +189,36 @@ export async function status() {
     autostart: state.autostart,
     online,
     exeFound: !!kuroExe(),
+    // True when the running instance was spawned by THIS plugin (we own its lifecycle
+    // and may terminate it on DSH exit, subject to the user's exit-choice prompt).
+    spawnedByUs: online && sidecarProc !== null && sidecarProc.exitCode === null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Single-instance + exit coordination (dsh-pet v2.0 requirements):
+// - The pet may run fully standalone; DSH attaches to an already-running instance.
+// - Only ONE pet process per machine: spawn is skipped when a probe already answers.
+// - On DSH exit the pet is NOT force-killed: the client asks the user, and the
+//   choice ("close" / "keep running") is persisted so future exits skip the prompt.
+// ---------------------------------------------------------------------------
+
+const EXIT_CHOICE_FILE = () => join(state.dataDir ?? "", "kurocat-exit-choice.json");
+
+function readExitChoice() {
+  try {
+    const raw = JSON.parse(readFileSync(EXIT_CHOICE_FILE(), "utf8"));
+    return raw.choice === "close" || raw.choice === "keep" ? raw.choice : null;
+  } catch { return null; }
+}
+
+export function rememberExitChoice(choice) {
+  try {
+    mkdirSync(state.dataDir, { recursive: true });
+    writeFileSync(EXIT_CHOICE_FILE(), JSON.stringify({ choice: choice || null, t: Date.now() }));
+  } catch { /* ignore */ }
+}
+
+export function getExitChoice() {
+  return readExitChoice();
 }

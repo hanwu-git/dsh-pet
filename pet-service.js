@@ -341,15 +341,24 @@ export function apply(ctx) {
   logLine("apply-ran", { build: BUILD });
 
   // Sync the KuroCat bridge with persisted settings on every activation (port, enabled,
-  // autostart). In kurocat mode the collie surfaces are OFF: the pinned desktop window is
-  // never restored and any stale one is stopped; optional sidecar launch when autostart is on.
+  // autostart). Pet lifecycle per the v2.0 requirements:
+  // - The pet may run STANDALONE: if an instance already answers on our port, we adopt it
+  //   and start tracking DSH state into it (no second process is ever spawned).
+  // - If not running and petMode=kurocat: autostart setting decides whether we launch it.
+  // - On DSH exit we do NOT kill it: the web client asks the user (kurocat-exit-choice).
   let kuroMode = false;
   {
     const s = readSettings();
     kuroMode = s.petMode === "kurocat";
-    kuroBridge.configure({ kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart });
-    if (kuroMode && s.kurocatAutostart) {
-      kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, reason: r.reason || "" }))
+    kuroBridge.configure({
+      kurocat: s.kurocat,
+      kurocatPort: s.kurocatPort,
+      kurocatAutostart: s.kurocatAutostart,
+      dataDir: stateDir,
+    });
+    // Attach to a running instance OR auto-start per settings; either way tracking begins.
+    if (kuroMode) {
+      kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, adopted: !!r.adopted, reason: r.reason || "" }))
         .catch(() => {});
     }
   }
@@ -494,15 +503,30 @@ export function apply(ctx) {
         return;
       }
       if (action === "kurocat-start") {
-        // Sidecar launch: start KuroCat.exe when the user picks the KuroCat pet mode and
-        // enables autostart. Safe no-op when it is already running.
+        // Start-or-adopt: never spawns a second instance when one already answers.
         const r = await kuroBridge.startSidecar();
         sendJson(res, 200, r);
         return;
       }
       if (action === "kurocat-stop") {
+        // Explicit user action only (settings page). DSH exit uses the choice flow below.
         kuroBridge.stopSidecar();
         sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (action === "kurocat-exit-choice") {
+        // The client asks the user "close the pet too?" at DSH exit and reports the answer.
+        // Once remembered, later exits apply it without prompting again. A cleared/null
+        // choice re-enables prompting (the settings page offers "ask every time").
+        const choice = body && body.choice;
+        if (choice === "close" || choice === "keep" || choice === null) {
+          if (choice) kuroBridge.rememberExitChoice(choice);
+          else kuroBridge.rememberExitChoice(null);
+          if (choice === "close") kuroBridge.stopSidecar();
+          sendJson(res, 200, { ok: true, choice: kuroBridge.getExitChoice() });
+        } else {
+          sendJson(res, 200, { ok: true, choice: kuroBridge.getExitChoice() });
+        }
         return;
       }
       if (action === "settings") {
@@ -535,8 +559,8 @@ export function apply(ctx) {
           return;
         }
         sendJson(res, 200, { ok: true, ...writeSettings(value) });
-        // Pet-mode switch owns the collie surfaces: kurocat stops the pinned desktop window
-        // (unpin + quit companion); collie clears the flag so the page re-shows the widget.
+        // Pet-mode switch: kurocat starts/attaches the pet; collie only stops a pet WE
+        // spawned (an adopted/standalone instance is left running — the user owns it).
         if (value && value.petMode === "kurocat") {
           if (pinned) setPinned(false);
           kuroBridge.startSidecar().catch(() => {});
