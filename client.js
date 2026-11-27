@@ -107,7 +107,8 @@ window.__ModuleLoader__.load({
           try {
             const r = await rpc('status');
             if (stopped || !r || r.ok === false) return;
-            setDelegated(r.petMode === 'kurocat');
+            // Both kurocat variants (embedded v2.0 / external official) hide the collie.
+            setDelegated(r.petMode === 'kurocat' || r.petMode === 'kurocat-external');
             const mode = r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default';
             if (mode !== imageModeRef.current) {
               imageModeRef.current = mode;
@@ -326,6 +327,12 @@ window.__ModuleLoader__.load({
       { value: 'small', label: '小', desc: '100 × 91（约 1/9 面积）' },
     ];
 
+    const PET_MODES = [
+      { value: 'collie', label: '🐕 边牧（内置）', desc: '页内宠物 + 桌面固定小窗，支持自定义图片' },
+      { value: 'kurocat', label: '🐱 内嵌猫（v2.0）', desc: 'KuroCat 引擎随插件内置：打字联动、捏猫、3D、OBS；端口 27430+，与官方版共存' },
+      { value: 'kurocat-external', label: '🐱 外部官方猫', desc: '转发到你手装的官方 KuroCat（端口 27420），插件不托管其生命周期' },
+    ];
+
     function SettingsTab() {
       const [size, setSize] = React.useState('large');
       const [sound, setSound] = React.useState(true);
@@ -362,7 +369,7 @@ window.__ModuleLoader__.load({
           setImageMode(r.image === 'custom' && r.hasCustomImage ? 'custom' : 'default');
           setHasCustom(!!r.hasCustomImage);
           setVersion(r.version || '');
-          setPetMode(r.petMode === 'kurocat' ? 'kurocat' : 'collie');
+          setPetMode(['kurocat', 'kurocat-external'].includes(r.petMode) ? r.petMode : 'collie');
           setKurocatEnabled(r.kurocat !== false);
           setKuroAutostart(!!r.kurocatAutostart);
         }).catch(() => {});
@@ -559,10 +566,7 @@ window.__ModuleLoader__.load({
         h('div', null,
           h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, '宠物形象'),
           h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
-            [
-              { value: 'collie', label: '🐕 边牧（内置）', desc: '页内宠物 + 桌面固定小窗，支持自定义图片' },
-              { value: 'kurocat', label: '🐱 KuroCat（外挂）', desc: '关闭内置宠物，监控交给桌面打字小黑猫（需本机安装 KuroCat）' },
-            ].map(o => h('button', {
+            PET_MODES.map(o => h('button', {
               key: o.value,
               type: 'button',
               onClick: () => setPetModeRpc(o.value),
@@ -580,7 +584,7 @@ window.__ModuleLoader__.load({
               h('div', { style: { fontSize: 12, opacity: 0.7 } }, o.desc),
             )),
           ),
-          petMode === 'kurocat' && kuroStatus ? h('div', {
+          (petMode === 'kurocat' || petMode === 'kurocat-external') && kuroStatus ? h('div', {
             style: { marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12 },
           },
             h('span', {
@@ -605,8 +609,9 @@ window.__ModuleLoader__.load({
             }, kuroMsg.text) : null,
           ) : null,
         ),
-        petMode === 'kurocat' ? h('div', null,
-          h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } }, 'KuroCat 联动'),
+        (petMode === 'kurocat' || petMode === 'kurocat-external') ? h('div', null,
+          h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 8 } },
+            petMode === 'kurocat' ? '内嵌猫联动' : '外部官方猫联动'),
           h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 } },
             h('input', {
               type: 'checkbox',
