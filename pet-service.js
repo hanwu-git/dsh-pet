@@ -1,4 +1,4 @@
-// Host side of the border-collie pet: a function-plugin (plain `apply(ctx)`), same shape as the
+﻿// Host side of the border-collie pet: a function-plugin (plain `apply(ctx)`), same shape as the
 // prompt-polish plugin. NO bare imports of @deepseek-ai/* packages — a linked plugin's real file
 // location (D:\obj\dsh-pet) has no node_modules carrying host internals, so those imports fail at
 // activation (ERR_MODULE_NOT_FOUND). Instead we register ONE webServer route
@@ -243,6 +243,7 @@ function writeSettings(patch) {
     petPort: next.petPort,
     petAutostart: next.petAutostart,
     dataDir: stateDir,
+    onLog: logLine,
     embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
   });
   // Pet-mode switch: kurocat starts/attaches the pet; collie only stops a pet WE
@@ -425,6 +426,7 @@ export function apply(ctx) {
       petPort: s.petPort,
       petAutostart: s.petAutostart,
       dataDir: stateDir,
+      onLog: logLine,
       // Vendored exe preferred; bridge falls back to the official install when absent.
       embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
     });
@@ -638,6 +640,7 @@ export function apply(ctx) {
         petBridge.configure({
           petBridge: s.petBridge, petPort: s.petPort, petAutostart: s.petAutostart,
           dataDir: stateDir,
+          onLog: logLine,
           embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
         });
         const st = await petBridge.status();

@@ -97,6 +97,7 @@ export function configure(patch) {
   const autostart = typeof patch.petAutostart === "boolean" ? patch.petAutostart : patch.kurocatAutostart;
   if (typeof autostart === "boolean") state.autostart = autostart;
   if (typeof patch.dataDir === "string" && patch.dataDir) state.dataDir = patch.dataDir;
+  if (typeof patch.onLog === "function") state.onLog = patch.onLog;
   if (typeof patch.embeddedExe === "string" && patch.embeddedExe && existsSync(patch.embeddedExe)) {
     state.embeddedExe = patch.embeddedExe;
   }
@@ -112,8 +113,10 @@ export function bridgeEvent(kind, detail = {}) {
   if (!state.enabled) return false;
   const map = {
     runningStart: { status: "working", source: "DSH", text: detail.text || "任务执行中…", autoType: true, ttlMs: 45_000, sound: false },
-    runningEnd:   { status: "done",    source: "DSH", text: detail.text || "执行完成", ttlMs: 6_500, sound: true },
-    fail:         { status: "error",   source: "DSH", text: ("执行失败：" + (detail.message || "")).slice(0, 72), ttlMs: 8_500, sound: true },
+    // Completion/failure notices are the ones the user must actually SEE, so they linger
+    // longer than the upstream defaults (6.5s/8.5s were easy to miss while reading the chat).
+    runningEnd:   { status: "done",    source: "DSH", text: detail.text || "执行完成", ttlMs: 20_000, sound: true },
+    fail:         { status: "error",   source: "DSH", text: ("执行失败：" + (detail.message || "")).slice(0, 72), ttlMs: 20_000, sound: true },
     ask:          { status: "waiting", source: "DSH", text: detail.text || "等你确认", ttlMs: 90_000, sound: true },
   };
   const payload = map[kind];
@@ -176,10 +179,22 @@ async function flush() {
   const batch = [...pending.values()];
   pending.clear();
   if (batch.length === 0) return;
-  if (!(await probe(state.port))) return;
+  if (!(await probe(state.port))) {
+    // Pet not reachable: drop the batch (it would be stale by the time it comes back) but
+    // leave a trace — otherwise "no bubble appeared" is indistinguishable from "never sent".
+    if (state.onLog) state.onLog("bridge-skip-offline", { events: batch.map((b) => b.status).join(",") });
+    return;
+  }
   // Only the LAST event of the batch matters for the cat (its UI is single-bubble);
   // but all of them are cheap to send, so forward the last one only to avoid flicker.
-  await post(state.port, "/hook", batch[batch.length - 1]);
+  const last = batch[batch.length - 1];
+  const ok = await post(state.port, "/hook", last);
+  if (state.onLog) {
+    state.onLog("bridge-forward", {
+      status: last.status, text: last.text, ttlMs: last.ttlMs, ok: !!ok,
+      coalesced: batch.length,
+    });
+  }
 }
 
 // ---- optional sidecar lifecycle ---------------------------------------------
