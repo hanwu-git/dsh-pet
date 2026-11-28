@@ -20,6 +20,8 @@ export interface AgentCompanionEvent {
   autoType?: boolean;
   sound?: boolean;
   ttlMs?: number;
+  /** DSH session this notice is about; enables click-to-jump. */
+  sessionId?: string;
   ts?: number;
 }
 
@@ -46,6 +48,8 @@ export interface AgentCompanionOptions {
   getTarget: () => AgentCompanionTarget | null;
   is3DTarget: () => boolean;
   allowSound: () => boolean;
+  /** Called when the user clicks a bubble that carries a session id. */
+  onClickNavigate?: (sessionId: string) => void;
 }
 
 export class AgentCompanionController {
@@ -71,12 +75,36 @@ export class AgentCompanionController {
   /** Close button appended to the bubble (pointer-events:auto, the pill itself is none). */
   private closeBtnEl: HTMLButtonElement | null = null;
 
+  /** The session id carried by the notice currently on screen, if the host supplied one.
+   *  A bubble click uses it to ask DSH to re-open that conversation. */
+  private lastSessionId: string | null = null;
+  /** Called with a session id when the user clicks a bubble that is about one. */
+  public onClickNavigate: ((sessionId: string) => void) | null = null;
+
   constructor(opts: AgentCompanionOptions) {
     this.bubbleEl = opts.bubbleEl;
     this.getTarget = opts.getTarget;
     this.is3DTarget = opts.is3DTarget;
     this.allowSound = opts.allowSound;
+    this.onClickNavigate = opts.onClickNavigate ?? null;
     this.attachCloseButton();
+    this.attachBubbleClick();
+  }
+
+  /** Clicking the pill (not the ✕) asks DSH to jump back to the session the notice is about.
+   *  The pill is pointer-events:none overall, so this listener only receives clicks when the
+   *  window is already interactive; the ✕ stops propagation. */
+  private attachBubbleClick(): void {
+    const el = this.bubbleEl;
+    if (!el) return;
+    el.style.pointerEvents = 'auto';
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', (e) => {
+      // Ignore clicks on the close button (it stops propagation, but be defensive).
+      if ((e.target as HTMLElement)?.dataset?.bubbleAction === 'close') return;
+      if (!this.lastSessionId || !this.onClickNavigate) return;
+      this.onClickNavigate(this.lastSessionId);
+    });
   }
 
   /** Append a ✕ button inside the pill. The pill is pointer-events:none, so the button
@@ -88,6 +116,7 @@ export class AgentCompanionController {
     btn.type = 'button';
     btn.textContent = '×';
     btn.setAttribute('aria-label', '关闭提示');
+    btn.dataset.bubbleAction = 'close';
     btn.style.cssText = [
       'pointer-events:auto',
       'margin-left:6px',
@@ -185,6 +214,9 @@ export class AgentCompanionController {
 
     const status = (ev.status || 'idle').toLowerCase() as AgentStatusKind;
     this.activeStatus = status;
+    // Remember which session this notice is about so a bubble click can jump to it. The
+    // host re-sends sessionId on status events; clear it when a notice explicitly has none.
+    this.lastSessionId = ev.sessionId ?? null;
 
     // Track the running flag that drives the persistent bubble. `working` sets it;
     // `done`/`error`/`idle` clear it; `waiting`/`thinking` leave it untouched (the task is

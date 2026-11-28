@@ -221,6 +221,17 @@ const agentCompanion = new AgentCompanionController({
   getTarget: () => (active3d && engine3d ? engine3d : engine),
   is3DTarget: () => Boolean(active3d && engine3d),
   allowSound: () => settings.soundEnabled !== false,
+  // Bubble click → record the session on our OWN loopback server. The DSH plugin polls
+  // GET /dsh/pending-nav and turns it into "open this conversation" in the web client.
+  // (The plugin cannot be called directly: its RPC route sits behind DSH's cookie fence.)
+  onClickNavigate: (sessionId) => {
+    const url = `http://127.0.0.1:${settings.mcpPort}/dsh/navigate`;
+    void fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    }).catch(() => {});
+  },
 });
 
 window.addEventListener('resize', () => engine3d?.resize());

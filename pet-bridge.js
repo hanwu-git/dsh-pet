@@ -121,6 +121,8 @@ export function bridgeEvent(kind, detail = {}) {
   };
   const payload = map[kind];
   if (!payload) return false;
+  // Carry the session id so the pet's bubble can jump back to that conversation on click.
+  if (detail.sessionId) payload.sessionId = String(detail.sessionId);
   if (kind === "runningStart") running = true;
   if (kind === "runningEnd" || kind === "fail") running = false;
   pending.set(kind, payload);
@@ -172,6 +174,29 @@ export function handlePetNotify(body) {
     return true;
   }
   return false;
+}
+
+/** Session id queued by a bubble click inside the pet, if any. The pet's own loopback server
+ *  exposes GET /dsh/pending-nav which it clears on read (one delivery per click). */
+export async function takePendingNavigation() {
+  if (!(await probe(state.port))) return null;
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: "127.0.0.1", port: state.port, path: "/dsh/pending-nav", timeout: 400 },
+      (res) => {
+        let body = "";
+        res.on("data", (c) => { body += c; });
+        res.on("end", () => {
+          try {
+            const v = JSON.parse(body);
+            resolve(v && typeof v.sessionId === "string" && v.sessionId ? v.sessionId : null);
+          } catch { resolve(null); }
+        });
+      },
+    );
+    req.on("timeout", () => { req.destroy(); resolve(null); });
+    req.on("error", () => resolve(null));
+  });
 }
 
 async function flush() {

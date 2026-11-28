@@ -150,6 +150,8 @@ const STALE_RUNNING_MS = 45 * 60 * 1000;
 // Most recent "navigate to this session" request, handed from the desktop window (via cmd.json)
 // to the web client (via the take-navigation RPC). Overwrite semantics are fine: latest wins.
 let pendingNavigation = null;
+// Guard so the pet's /dsh/pending-nav poll never stacks requests.
+let navPollInFlight = false;
 
 function writeState(patch) {
   try {
@@ -476,12 +478,12 @@ export function apply(ctx) {
     const id = agent && agent.id;
     if (status === "running") {
       if (id) { runningSet.add(id); runningSince.set(id, Date.now()); }
-      if (bridgeOn && runningSet.size === 1) petBridge.bridgeEvent("runningStart");
+      if (bridgeOn && runningSet.size === 1) petBridge.bridgeEvent("runningStart", { sessionId: id });
       if (!pinned) return;
       writeState({ active: true });
     } else {
       if (id) { runningSet.delete(id); runningSince.delete(id); }
-      if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
+      if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd", { sessionId: id });
       if (!pinned) return;
       writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
@@ -494,7 +496,7 @@ export function apply(ctx) {
     if (!id || !runningSet.has(id)) return;
     runningSet.delete(id);
     runningSince.delete(id);
-    if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
+    if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd", { sessionId: id });
     if (pinned) writeState({ active: runningSet.size > 0, runningEnd: { id } });
   }, { global: true });
   // Sessions also end independently of agents; clear anything still attributed to one so a
@@ -504,11 +506,11 @@ export function apply(ctx) {
     if (!id || !runningSet.has(id)) return;
     runningSet.delete(id);
     runningSince.delete(id);
-    if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
+    if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd", { sessionId: id });
   }, { global: true });
   ctx.on("agent/error", ({ agent, error }) => {
     const message = String((error && error.message) || "执行出错").slice(0, 60);
-    if (bridgeOn) petBridge.bridgeEvent("fail", { message });
+    if (bridgeOn) petBridge.bridgeEvent("fail", { message, sessionId: agent && agent.id });
     if (!pinned) return;
     writeState({ fail: { id: agent && agent.id, message } });
   }, { global: true });
@@ -516,7 +518,7 @@ export function apply(ctx) {
     const isAsk = (event.type === "tool/call" && event.data && event.data.name === "ask_user_question")
       || event.type === "approval/asked";
     if (bridgeOn && isAsk) {
-      petBridge.bridgeEvent("ask");
+      petBridge.bridgeEvent("ask", { sessionId: session && session.id });
       // Pull the user back: DSH main window to the front + queue navigation to the exact
       // conversation (the client's take-navigation poll delivers it to openSession).
       activateDshWindow();
@@ -549,6 +551,25 @@ export function apply(ctx) {
     } catch { /* ignore transient read/write races */ }
   }, 800);
   ctx.effect(() => () => clearInterval(cmdTimer));
+
+  // Bubble clicks inside the pet: the pet records the session id on its own loopback server
+  // (it cannot call our RPC route — that sits behind DSH's cookie fence). Poll it and feed
+  // the existing pendingNavigation slot, which the web client already drains every second
+  // via take-navigation → openSession.
+  const navPollTimer = setInterval(() => {
+    if (!navPollInFlight) {
+      navPollInFlight = true;
+      petBridge.takePendingNavigation()
+        .then((sessionId) => {
+          if (!sessionId) return;
+          pendingNavigation = { sessionId, t: Date.now() };
+          logLine("nav-from-pet", { sessionId });
+        })
+        .catch(() => { /* transient */ })
+        .finally(() => { navPollInFlight = false; });
+    }
+  }, 1000);
+  ctx.effect(() => () => clearInterval(navPollTimer));
 
   // Persistent "working" bubble heartbeat. While at least one DSH agent is running, re-send
   // the working status to the pet every 3s. Rationale: the pet keeps the working bubble on

@@ -14,6 +14,20 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const SERVER_NAME: &str = "dshpet";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Session id queued by a bubble click (POST /dsh/navigate), consumed by the DSH plugin via
+/// GET /dsh/pending-nav. One slot, latest wins — matches "the last thing you clicked".
+static PENDING_NAV: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn set_pending_nav(session_id: &str) {
+    if let Ok(mut slot) = PENDING_NAV.lock() {
+        *slot = Some(session_id.to_string());
+    }
+}
+
+fn take_pending_nav() -> Option<String> {
+    PENDING_NAV.lock().ok().and_then(|mut slot| slot.take())
+}
+
 /// Real-time AI Coding Companion / pet interaction payload broadcast to both the desktop
 /// pet window (`dshpet-agent-event`) and the OBS Browser Source SSE stream (`agentEvent`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +53,10 @@ pub struct AgentCompanionEvent {
     pub sound: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ttl_ms: Option<u64>,
+    /// dsh-pet: the DSH session this notice is about. Carried through to the bubble so a
+    /// click can ask the host to re-open that exact conversation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     #[serde(default)]
     pub ts: u64,
 }
@@ -203,6 +221,11 @@ pub fn parse_hook_payload(
         .get("ttlMs")
         .and_then(|v| v.as_u64())
         .map(|v| v.clamp(1_000, 300_000));
+    // dsh-pet: forwarded verbatim so a bubble click can re-open the originating session.
+    let session_id = raw
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
 
     // 1) Simplified / direct payload: explicit `action`, `status`, or CLI `--event`
     if let Some(act_raw) = raw.get("action").and_then(|v| v.as_str()) {
@@ -217,6 +240,7 @@ pub fn parse_hook_payload(
                 auto_type: Some(false),
                 sound: explicit_sound,
                 ttl_ms: Some(explicit_ttl.unwrap_or(5_000)),
+                session_id: session_id.clone(),
                 ts,
             });
         }
@@ -245,6 +269,7 @@ pub fn parse_hook_payload(
                 auto_type: Some(explicit_auto_type.unwrap_or(default_auto_type)),
                 sound: Some(explicit_sound.unwrap_or(default_sound)),
                 ttl_ms: Some(explicit_ttl.unwrap_or(default_ttl)),
+                session_id: session_id.clone(),
                 ts,
             });
         }
@@ -263,6 +288,7 @@ pub fn parse_hook_payload(
                 auto_type: Some(false),
                 sound: Some(explicit_sound.unwrap_or(true)),
                 ttl_ms: Some(explicit_ttl.unwrap_or(6_500)),
+                session_id: session_id.clone(),
                 ts,
             });
         }
@@ -290,6 +316,7 @@ pub fn parse_hook_payload(
                 auto_type: Some(false),
                 sound: Some(explicit_sound.unwrap_or(false)),
                 ttl_ms: Some(explicit_ttl.unwrap_or(5_000)),
+                session_id: session_id.clone(),
                 ts,
             });
         }
@@ -327,6 +354,7 @@ pub fn parse_hook_payload(
             auto_type: Some(false),
             sound: Some(false),
             ttl_ms: Some(explicit_ttl.unwrap_or(3_200)),
+            session_id: session_id.clone(),
             ts,
         }),
         "sessionend" | "session_end" => Some(AgentCompanionEvent {
@@ -339,6 +367,7 @@ pub fn parse_hook_payload(
             auto_type: Some(false),
             sound: Some(false),
             ttl_ms: Some(1_000),
+            session_id: session_id.clone(),
             ts,
         }),
         "preinvocation" | "userpromptsubmit" | "beforesubmitprompt" => Some(AgentCompanionEvent {
@@ -351,6 +380,7 @@ pub fn parse_hook_payload(
             auto_type: Some(explicit_auto_type.unwrap_or(true)),
             sound: Some(false),
             ttl_ms: Some(explicit_ttl.unwrap_or(45_000)),
+            session_id: session_id.clone(),
             ts,
         }),
         "pretooluse" | "posttooluse" | "postinvocation" | "beforeshellexecution"
@@ -366,6 +396,7 @@ pub fn parse_hook_payload(
                     auto_type: Some(false),
                     sound: Some(explicit_sound.unwrap_or(true)),
                     ttl_ms: Some(explicit_ttl.unwrap_or(8_000)),
+                    session_id: session_id.clone(),
                     ts,
                 });
             }
@@ -380,6 +411,7 @@ pub fn parse_hook_payload(
                 auto_type: Some(explicit_auto_type.unwrap_or(auto_type)),
                 sound: Some(false),
                 ttl_ms: Some(explicit_ttl.unwrap_or(45_000)),
+                session_id: session_id.clone(),
                 ts,
             })
         }
@@ -393,6 +425,7 @@ pub fn parse_hook_payload(
             auto_type: Some(false),
             sound: Some(explicit_sound.unwrap_or(true)),
             ttl_ms: Some(explicit_ttl.unwrap_or(8_500)),
+            session_id: session_id.clone(),
             ts,
         }),
         "permissionrequest" | "notification" => Some(AgentCompanionEvent {
@@ -405,6 +438,7 @@ pub fn parse_hook_payload(
             auto_type: Some(false),
             sound: Some(explicit_sound.unwrap_or(true)),
             ttl_ms: Some(explicit_ttl.unwrap_or(90_000)),
+            session_id: session_id.clone(),
             ts,
         }),
         "stop" | "subagentstop" => {
@@ -419,6 +453,7 @@ pub fn parse_hook_payload(
                     auto_type: Some(false),
                     sound: Some(false),
                     ttl_ms: Some(1_000),
+                    session_id: session_id.clone(),
                     ts,
                 });
             }
@@ -433,6 +468,7 @@ pub fn parse_hook_payload(
                     auto_type: Some(false),
                     sound: Some(explicit_sound.unwrap_or(true)),
                     ttl_ms: Some(explicit_ttl.unwrap_or(9_000)),
+                    session_id: session_id.clone(),
                     ts,
                 });
             }
@@ -446,6 +482,7 @@ pub fn parse_hook_payload(
                 auto_type: Some(false),
                 sound: Some(explicit_sound.unwrap_or(true)),
                 ttl_ms: Some(explicit_ttl.unwrap_or(6_500)),
+                session_id: session_id.clone(),
                 ts,
             })
         }
@@ -1426,6 +1463,29 @@ fn handle_http_conn(
 
     if method == "DELETE" && path == "/mcp" {
         write_http_response(&mut stream, "204 No Content", "text/plain", "");
+        return;
+    }
+
+    if method == "POST" && path == "/dsh/navigate" {
+        // The pet's bubble was clicked: remember which session to open. The DSH plugin polls
+        // GET /dsh/pending-nav and forwards it to the web client (which calls openSession).
+        let buf = read_http_body(&mut reader, content_length, is_chunked, 8 * 1024).unwrap_or_default();
+        let sid = serde_json::from_slice::<Value>(&buf)
+            .ok()
+            .and_then(|v| v.get("sessionId").and_then(|s| s.as_str()).map(|s| s.to_string()));
+        if let Some(sid) = sid {
+            if !sid.is_empty() {
+                set_pending_nav(&sid);
+            }
+        }
+        write_http_response(&mut stream, "204 No Content", "text/plain", "");
+        return;
+    }
+
+    if method == "GET" && path == "/dsh/pending-nav" {
+        let sid = take_pending_nav();
+        let body = json!({ "sessionId": sid }).to_string();
+        write_http_response(&mut stream, "200 OK", "application/json; charset=utf-8", &body);
         return;
     }
 
