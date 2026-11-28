@@ -5,7 +5,7 @@
     "code": "ja-JP"
   },
   "menu": {
-    "header": "🐈‍⬛ KuroCat 黒猫",
+    "header": "🐈‍⬛ DSH Pet 黒猫",
     "close_title": "メニューを閉じる (Esc)",
     "tab_appearance": "🐱 見た目・反応",
     "tab_system": "⚙️ キー・OBS・設定",
@@ -98,7 +98,7 @@
     "live_chroma_green": "グリーン",
     "live_chroma_magenta": "ピンク",
     "live_hide_pet": "配信窓のみ表示（デスクトップ非表示）",
-    "live_guide_hint": "ウィンドウ「KuroCat Live」→ クロマキー",
+    "live_guide_hint": "ウィンドウ「DSH Pet Live」→ クロマキー",
     "toggle_mcp": "MCP サーバーを有効化",
     "copy_mcp": "MCP 設定をコピー",
     "mcp_hint": "AI 作成",
@@ -139,9 +139,9 @@
     "game_admin_hint": "管理者実行中のゲーム · 昇格で入力同期"
   },
   "tray": {
-    "tooltip": "KuroCat",
-    "tooltip_admin": "KuroCat（管理者 · ゲーム入力対応）",
-    "toggle_show": "KuroCat を表示 / 非表示",
+    "tooltip": "DSH Pet",
+    "tooltip_admin": "DSH Pet（管理者 · ゲーム入力対応）",
+    "toggle_show": "DSH Pet を表示 / 非表示",
     "pause_guard": "入力監視を一時停止して隠す（アンチチート対策）",
     "admin_ready": "✓ 管理者権限で実行中",
     "admin_restart": "管理者として再起動（ゲーム入力用）",
@@ -158,7 +158,7 @@
     "obs_toggle": "OBS ソースを有効化 (127.0.0.1:{port})",
     "obs_hide_pet": "OBS のみ表示（デスクトップ非表示）",
     "obs_open_browser": "ブラウザで OBS ソースを確認",
-    "live_capture_toggle": "配信キャプチャ窓を開く (KuroCat Live)",
+    "live_capture_toggle": "配信キャプチャ窓を開く (DSH Pet Live)",
     "live_hide_pet": "配信窓のみ表示（デスクトップ非表示）",
     "breed_menu": "スキン",
     "scale_menu": "サイズ",
@@ -185,7 +185,7 @@
     "fps_60": "なめらか 60 FPS（標準）",
     "fps_30": "省電力 30 FPS（低負荷）",
     "reset_pos": "右下に位置をリセット",
-    "desktop_shortcut": "デスクトップショートカット作成 (KuroCat)",
+    "desktop_shortcut": "デスクトップショートカット作成 (DSH Pet)",
     "mac_input_menu": "入力監視と権限",
     "mac_reset_perms": "古い権限をリセットして再許可（更新後に動かない時）",
     "mac_reconnect": "入力監視を再接続（Karabiner 対応）",
@@ -195,6 +195,6 @@
     "check_update": "アップデートを確認 (v{ver})",
     "interact_menu": "反応・ガード",
     "system_menu": "環境設定",
-    "quit": "KuroCat を終了"
+    "quit": "DSH Pet を終了"
   }
 }

@@ -1,4 +1,4 @@
-// Client: page widget + pin toggle. The pin toggle now calls the Host HTTP route
+﻿// Client: page widget + pin toggle. The pin toggle now calls the Host HTTP route
 // /border-collie-pet/rpc (fetch, same-origin, cookie-authenticated) instead of the
 // typert remote namespace — see pet-service.js for the host side.
 window.__ModuleLoader__.load({
@@ -329,7 +329,7 @@ window.__ModuleLoader__.load({
 
     const PET_MODES = [
       { value: 'collie', label: '🐕 边牧（内置）', desc: '页内宠物 + 桌面固定小窗，支持自定义图片' },
-      { value: 'kurocat', label: '🐱 内嵌猫（v2.0）', desc: 'KuroCat 引擎随插件内置：打字联动、捏猫、3D、OBS；无需安装官方 KuroCat，端口 27430+' },
+      { value: 'kurocat', label: '🐱 内嵌猫（v2.0）', desc: '内置猫引擎：打字联动、捏猫、3D、OBS；随插件分发，无需安装任何外部程序，端口 27430+' },
     ];
 
     function SettingsTab() {
@@ -348,13 +348,13 @@ window.__ModuleLoader__.load({
       const [version, setVersion] = React.useState('');
       // Pet mode + KuroCat bridge state.
       const [petMode, setPetMode] = React.useState('collie');
-      const [kurocatEnabled, setKurocatEnabled] = React.useState(true);
-      const [kuroAutostart, setKuroAutostart] = React.useState(false);
+      const [petEnabled, setPetEnabled] = React.useState(true);
+      const [kuroAutostart, setPetAutostart] = React.useState(false);
       const [kuroStatus, setKuroStatus] = React.useState(null); // {online, exeFound, port}
       const [kuroMsg, setKuroMsg] = React.useState(null);
 
       const refreshKuroStatus = React.useCallback(() => {
-        rpc('kurocat-status').then((r) => {
+        rpc('pet-status').then((r) => {
           if (r && r.ok !== false) setKuroStatus(r);
         }).catch(() => {});
       }, []);
@@ -369,8 +369,8 @@ window.__ModuleLoader__.load({
           setHasCustom(!!r.hasCustomImage);
           setVersion(r.version || '');
           setPetMode(r.petMode === 'kurocat' ? 'kurocat' : 'collie');
-          setKurocatEnabled(r.kurocat !== false);
-          setKuroAutostart(!!r.kurocatAutostart);
+          setPetEnabled(r.petBridge !== false);
+          setPetAutostart(!!r.petAutostart);
         }).catch(() => {});
         refreshKuroStatus();
         const t = setInterval(refreshKuroStatus, 5000);
@@ -492,14 +492,14 @@ window.__ModuleLoader__.load({
         }
       }, [busy]);
 
-      const setKurocatOption = React.useCallback(async (patch) => {
+      const setPetOption = React.useCallback(async (patch) => {
         setErr('');
         try {
           const r = await rpc('settings', { value: patch });
           if (r && r.ok === false) setErr(String(r.error || '保存失败'));
           else {
-            if (typeof patch.kurocat === 'boolean') setKurocatEnabled(patch.kurocat);
-            if (typeof patch.kurocatAutostart === 'boolean') setKuroAutostart(patch.kurocatAutostart);
+            if (typeof patch.kurocat === 'boolean') setPetEnabled(patch.kurocat);
+            if (typeof patch.petAutostart === 'boolean') setPetAutostart(patch.petAutostart);
           }
         } catch (e) {
           setErr('保存失败：' + (e && e.message ? e.message : '请求不可用'));
@@ -508,11 +508,11 @@ window.__ModuleLoader__.load({
       }, [refreshKuroStatus]);
 
       const startKuro = React.useCallback(async () => {
-        setKuroMsg({ ok: null, text: '正在启动 KuroCat…' });
+        setKuroMsg({ ok: null, text: '正在启动宠物…' });
         try {
-          const r = await rpc('kurocat-start');
-          if (r && r.ok) setKuroMsg({ ok: true, text: 'KuroCat 已启动' });
-          else setKuroMsg({ ok: false, text: '启动失败：' + (r && r.reason ? r.reason : '未找到 KuroCat.exe') });
+          const r = await rpc('pet-start');
+          if (r && r.ok) setKuroMsg({ ok: true, text: '宠物已启动' });
+          else setKuroMsg({ ok: false, text: '启动失败：' + (r && r.reason ? r.reason : '未找到宠物程序') });
         } catch (e) {
           setKuroMsg({ ok: false, text: '启动失败：' + (e && e.message ? e.message : '请求不可用') });
         }
@@ -594,8 +594,8 @@ window.__ModuleLoader__.load({
               },
             }),
             h('span', null, kuroStatus.online
-              ? 'KuroCat 已连接（端口 ' + kuroStatus.port + '）'
-              : (kuroStatus.exeFound ? 'KuroCat 未运行' : '未找到 KuroCat（请先安装）')),
+              ? '宠物已连接（端口 ' + kuroStatus.port + '）'
+              : (kuroStatus.exeFound ? '宠物未运行' : '未找到宠物程序（插件包可能不完整）')),
             !kuroStatus.online && kuroStatus.exeFound ? h('button', {
               type: 'button', onClick: startKuro,
               style: {
@@ -613,10 +613,10 @@ window.__ModuleLoader__.load({
           h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 } },
             h('input', {
               type: 'checkbox',
-              checked: kurocatEnabled,
-              onChange: (e) => setKurocatOption({ kurocat: e.target.checked }),
+              checked: petEnabled,
+              onChange: (e) => setPetOption({ petBridge: e.target.checked }),
             }),
-            h('span', null, '转发任务状态给 KuroCat'),
+            h('span', null, '转发任务状态给宠物'),
             h('span', { style: { opacity: 0.7, fontSize: 12 } }, '（任务开始/完成/失败/等你确认时驱动小猫表演）'),
           ),
           h('label', {
@@ -626,10 +626,10 @@ window.__ModuleLoader__.load({
               type: 'checkbox',
               checked: kuroAutostart,
               disabled: !kuroStatus || !kuroStatus.exeFound,
-              onChange: (e) => setKurocatOption({ kurocatAutostart: e.target.checked }),
+              onChange: (e) => setPetOption({ petAutostart: e.target.checked }),
             }),
-            h('span', null, 'DSH 启动时自动拉起 KuroCat'),
-            h('span', { style: { opacity: 0.7, fontSize: 12 } }, '（仅当选择 KuroCat 形象时生效）'),
+            h('span', null, 'DSH 启动时自动拉起宠物'),
+            h('span', { style: { opacity: 0.7, fontSize: 12 } }, '（仅当选择内嵌猫形象时生效）'),
           ),
         ) : null,
         h('div', null,
@@ -767,7 +767,7 @@ window.__ModuleLoader__.load({
       let exitChoice = null;
 
       const probe = () => {
-        rpc('kurocat-status').then((r) => {
+        rpc('pet-status').then((r) => {
           if (r && r.ok !== false) {
             petOnlineByUs = !!r.online;
             exitChoice = r.exitChoice || null;
@@ -790,7 +790,7 @@ window.__ModuleLoader__.load({
           const box = document.createElement('div');
           box.style.cssText = 'background:var(--dsh-bg,#fff);color:inherit;border-radius:12px;padding:20px 24px;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,0.35);font:14px/1.6 sans-serif;';
           box.innerHTML = '<div style="font-weight:600;font-size:15px;margin-bottom:8px">🐱 宠物还在运行</div>'
-            + '<div style="opacity:0.75;margin-bottom:16px">关闭 DSH 时，是否也同步关闭 KuroCat 宠物？</div>';
+            + '<div style="opacity:0.75;margin-bottom:16px">关闭 DSH 时，是否也同步关闭桌面宠物？</div>';
           const row = document.createElement('div');
           row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;';
           const mkBtn = (label, primary, val) => {
@@ -814,7 +814,7 @@ window.__ModuleLoader__.load({
           // Do not persist; pet keeps running; next exit asks again.
           return;
         }
-        try { await rpc('kurocat-exit-choice', { choice: val }); } catch (e) { /* best effort */ }
+        try { await rpc('pet-exit-choice', { choice: val }); } catch (e) { /* best effort */ }
       }
 
       // Intercept in-page close gestures while the pet runs and no standing choice exists.
@@ -845,7 +845,7 @@ window.__ModuleLoader__.load({
         if (exitChoice === 'close') {
           try {
             navigator.sendBeacon(RPC_PATH, new Blob(
-              [JSON.stringify({ action: 'kurocat-exit-choice', choice: 'close' })],
+              [JSON.stringify({ action: 'pet-exit-choice', choice: 'close' })],
               { type: 'application/json' },
             ));
           } catch (err) { /* best effort */ }

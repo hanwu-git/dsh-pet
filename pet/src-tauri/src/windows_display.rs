@@ -217,7 +217,7 @@ pub fn remember_dragged_position(app: &AppHandle, position: PhysicalPosition<i32
         };
         if let Some(settings) = updated {
             let _ = refresh_menu(&handle, &connected_displays(&window));
-            let _ = handle.emit("kuro-settings", settings);
+            let _ = handle.emit("dshpet-settings", settings);
         }
     });
 }
@@ -361,7 +361,7 @@ pub fn handle_menu(app: &AppHandle, item_id: &str) {
         settings.clone()
     };
     let _ = refresh_menu(app, &displays);
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 #[cfg(test)]

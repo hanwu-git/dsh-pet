@@ -1,6 +1,6 @@
 import {
   DEFAULT_TAIL_KEY_IDS,
-  KuroCatEngine,
+  PetEngine,
   type KeyboardOrientation,
   type TailKeyMode,
 } from './catEngine';
@@ -8,7 +8,7 @@ import { catAudio } from './audio';
 import { AgentCompanionController, type AgentCompanionEvent } from './agentCompanion';
 import { DEFAULT_BUILTIN_CATS, type CatSkinConfig } from './catSkins';
 import type { KeyboardLayoutId } from './keyboardLayout';
-import type { CollarColorId, KuroCatEngine3D } from './catEngine3d';
+import type { CollarColorId, PetEngine3D } from './catEngine3d';
 
 type ObsRenderMode = '2d' | '3d';
 type ObsHeadphoneMode = 'auto' | 'on' | 'off';
@@ -66,9 +66,9 @@ const liveSwatchButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>('#live-toolbar [data-chroma]'),
 );
 const agentBubbleEl = document.getElementById('agent-bubble') as HTMLDivElement | null;
-const engine = new KuroCatEngine(canvas);
+const engine = new PetEngine(canvas);
 
-let engine3d: KuroCatEngine3D | null = null;
+let engine3d: PetEngine3D | null = null;
 let loading3d: Promise<void> | null = null;
 let active3d = false;
 let webglBlocked = false;
@@ -203,13 +203,13 @@ async function persistLiveChromaColor(nextColor: LiveChromaColor): Promise<void>
       applyState();
     }
   } catch (err) {
-    console.warn('[KuroCat Live] Failed to persist chroma color:', err);
+    console.warn('[DSH Pet Live] Failed to persist chroma color:', err);
   }
 }
 
 function setupLiveModeUI(): void {
   if (!isLiveMode) return;
-  document.title = 'KuroCat Live';
+  document.title = 'DSH Pet Live';
   document.body.classList.add('live-mode');
   liveToolbarEl?.classList.remove('hidden');
 
@@ -318,8 +318,8 @@ function syncObs3D(
 
   if (!loading3d) {
     loading3d = import('./catEngine3d')
-      .then(({ KuroCatEngine3D }) => {
-        engine3d = new KuroCatEngine3D(canvas3d, { embedded: false });
+      .then(({ PetEngine3D }) => {
+        engine3d = new PetEngine3D(canvas3d, { embedded: false });
         engine3d.setChromaKeyBg(getActiveChromaHex());
         window.addEventListener('resize', () => engine3d?.resize());
         applyState();
@@ -456,10 +456,10 @@ async function connectTauriLive(): Promise<void> {
     applyState();
 
     await Promise.all([
-      listen<InputEvent>('kuro-input', (ev) => {
+      listen<InputEvent>('dshpet-input', (ev) => {
         if (ev.payload) handleInput(ev.payload);
       }),
-      listen<ObsAppSettings & Record<string, unknown>>('kuro-settings', (ev) => {
+      listen<ObsAppSettings & Record<string, unknown>>('dshpet-settings', (ev) => {
         if (!ev.payload || typeof ev.payload !== 'object') return;
         fullSettings = { ...ev.payload };
         currentSettings = { ...currentSettings, ...ev.payload };
@@ -471,30 +471,30 @@ async function connectTauriLive(): Promise<void> {
         }
         applyState();
       }),
-      listen<CatSkinConfig[]>('kuro-cats', (ev) => {
+      listen<CatSkinConfig[]>('dshpet-cats', (ev) => {
         if (Array.isArray(ev.payload) && ev.payload.length > 0) {
           catList = ev.payload;
           applyState();
         }
       }),
-      listen<boolean>('kuro-privacy', (ev) => {
+      listen<boolean>('dshpet-privacy', (ev) => {
         privacyActive = Boolean(ev.payload);
         engine.setPrivacyMode(privacyActive);
         engine3d?.setPrivacyMode(privacyActive);
         obsAgentCompanion.setPrivacyMode(privacyActive);
       }),
-      listen<boolean | { active?: boolean }>('kuro-game-active', (ev) => {
+      listen<boolean | { active?: boolean }>('dshpet-game-active', (ev) => {
         const parsed = ev.payload;
         gameActive = typeof parsed === 'boolean' ? parsed : Boolean(parsed?.active);
         applyState();
       }),
-      listen<AgentCompanionEvent>('kuro-agent-event', (ev) => {
+      listen<AgentCompanionEvent>('dshpet-agent-event', (ev) => {
         if (ev.payload) obsAgentCompanion.handleEvent(ev.payload);
       }),
     ]);
   } catch (err) {
     resolveTauriInit();
-    console.warn('[KuroCat Live] Failed to attach Tauri IPC:', err);
+    console.warn('[DSH Pet Live] Failed to attach Tauri IPC:', err);
   }
 }
 

@@ -1,23 +1,23 @@
 [package]
-name = "kuro-cat-pet"
-version = "5.1.3"
+name = "dsh-pet"
+version = "2.0.0"
 description = "Cross-platform desktop cat typing & mouse companion for Windows and macOS"
 authors = ["Kevin Hao"]
 edition = "2021"
 
 [lib]
-name = "kuro_cat_pet_lib"
+name = "dsh_pet_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "KuroCat"
+name = "DshPet"
 path = "src/main.rs"
 
 [features]
 # dsh-pet v2.0: a plain `cargo build --release` must produce a STANDALONE exe (loading the
 # embedded frontendDist), not a dev-mode exe that expects a Vite dev server on :1420.
 # Tauri switches to embedded-assets mode via its `custom-protocol` cfg, which `tauri build`
-# enables automatically — but we build with plain cargo from the plugin, so it's on by default here.
+# enables automatically 鈥?but we build with plain cargo from the plugin, so it's on by default here.
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 layout-108 = []

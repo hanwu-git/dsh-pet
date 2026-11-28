@@ -86,14 +86,16 @@ function post(port, path, payload) {
   });
 }
 
-/** Apply a settings patch coming from the host (validated there). */
+/** Apply a settings patch coming from the host (validated there). Legacy kurocat* keys are
+ *  still accepted so an older host build keeps working during upgrades. */
 export function configure(patch) {
   if (!patch || typeof patch !== "object") return { ...state };
-  if (typeof patch.kurocat === "boolean") state.enabled = patch.kurocat;
-  if (Number.isInteger(patch.kurocatPort) && patch.kurocatPort > 0 && patch.kurocatPort < 65536) {
-    state.port = patch.kurocatPort;
-  }
-  if (typeof patch.kurocatAutostart === "boolean") state.autostart = patch.kurocatAutostart;
+  const enabled = typeof patch.petBridge === "boolean" ? patch.petBridge : patch.kurocat;
+  if (typeof enabled === "boolean") state.enabled = enabled;
+  const port = Number.isInteger(patch.petPort) ? patch.petPort : patch.kurocatPort;
+  if (Number.isInteger(port) && port > 0 && port < 65536) state.port = port;
+  const autostart = typeof patch.petAutostart === "boolean" ? patch.petAutostart : patch.kurocatAutostart;
+  if (typeof autostart === "boolean") state.autostart = autostart;
   if (typeof patch.dataDir === "string" && patch.dataDir) state.dataDir = patch.dataDir;
   if (typeof patch.embeddedExe === "string" && patch.embeddedExe && existsSync(patch.embeddedExe)) {
     state.embeddedExe = patch.embeddedExe;

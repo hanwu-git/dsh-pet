@@ -558,10 +558,10 @@ pub fn refresh_tray_language(app: &AppHandle) {
         if let Ok(mut guard) = active_handles().lock() {
             *guard = Some(new_handles);
         }
-        if let Some(tray) = app.tray_by_id("kuro-tray") {
+        if let Some(tray) = app.tray_by_id("dshpet-tray") {
             let _ = tray.set_menu(Some(new_menu));
             let tip = if paused {
-                format!("KuroCat ({})", t(&settings.language, "tray.pause_guard"))
+                format!("DSH Pet ({})", t(&settings.language, "tray.pause_guard"))
             } else {
                 default_tray_tooltip(&settings.language)
             };
@@ -579,7 +579,7 @@ fn apply_language_and_save(app: &AppHandle, raw_lang: &str) {
         s.clone()
     };
     refresh_tray_language(app);
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 fn apply_fps_cap_and_save(app: &AppHandle, cap: u16) {
@@ -591,7 +591,7 @@ fn apply_fps_cap_and_save(app: &AppHandle, cap: u16) {
         s.clone()
     };
     sync_checkmarks(&updated);
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
@@ -603,13 +603,13 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
     let icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
 
     // Keep tray checkmarks synchronized when settings change from right-click menu, toast, or MCP.
-    app.listen("kuro-settings", move |ev| {
+    app.listen("dshpet-settings", move |ev| {
         if let Ok(s) = serde_json::from_str::<AppSettings>(ev.payload()) {
             sync_checkmarks(&s);
         }
     });
 
-    TrayIconBuilder::with_id("kuro-tray")
+    TrayIconBuilder::with_id("dshpet-tray")
         .icon(icon)
         .tooltip(default_tray_tooltip(&initial.language))
         .menu(&menu)
@@ -645,7 +645,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                             s.live_hide_pet = false;
                             crate::config::save_settings(&s);
                             sync_checkmarks(&s);
-                            let _ = app.emit("kuro-settings", s.clone());
+                            let _ = app.emit("dshpet-settings", s.clone());
                         }
                     }
                     set_pet_visible(app, next_vis);
@@ -667,7 +667,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                             }
                         }
                         let lang = state.settings.lock().unwrap().language.clone();
-                        if let Some(tray) = app.tray_by_id("kuro-tray") {
+                        if let Some(tray) = app.tray_by_id("dshpet-tray") {
                             let _ = tray.set_tooltip(Some(default_tray_tooltip(&lang)));
                         }
                         set_pet_visible(app, true);
@@ -680,7 +680,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                                 s.live_hide_pet = false;
                                 crate::config::save_settings(&s);
                                 sync_checkmarks(&s);
-                                let _ = app.emit("kuro-settings", s.clone());
+                                let _ = app.emit("dshpet-settings", s.clone());
                             }
                         }
                         set_pet_visible(app, next_vis);
@@ -700,9 +700,9 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         }
                     }
                     let lang = state.settings.lock().unwrap().language.clone();
-                    if let Some(tray) = app.tray_by_id("kuro-tray") {
+                    if let Some(tray) = app.tray_by_id("dshpet-tray") {
                         let tip = if next {
-                            format!("KuroCat ({})", t(&lang, "tray.pause_guard"))
+                            format!("DSH Pet ({})", t(&lang, "tray.pause_guard"))
                         } else {
                             default_tray_tooltip(&lang)
                         };
@@ -724,7 +724,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         s.clone()
                     };
                     sync_checkmarks(&updated);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "key_bubbles" => {
                     let updated = {
@@ -734,7 +734,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         s.clone()
                     };
                     sync_checkmarks(&updated);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "privacy_guard" => {
                     let updated = {
@@ -744,7 +744,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         s.clone()
                     };
                     sync_checkmarks(&updated);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "sound_toggle" => {
                     let updated = {
@@ -754,7 +754,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         s.clone()
                     };
                     sync_checkmarks(&updated);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "typing_sound_toggle" => {
                     let updated = {
@@ -764,7 +764,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         s.clone()
                     };
                     sync_checkmarks(&updated);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "always_on_top" => {
                     let (on_top, updated) = {
@@ -776,7 +776,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                     };
                     sync_checkmarks(&updated);
                     set_pet_always_on_top(app, on_top);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "autostart" => {
                     let mut s = state.settings.lock().unwrap();
@@ -787,7 +787,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         let updated = s.clone();
                         drop(s);
                         sync_checkmarks(&updated);
-                        let _ = app.emit("kuro-settings", updated);
+                        let _ = app.emit("dshpet-settings", updated);
                     }
                 }
                 "obs_toggle" => {
@@ -811,7 +811,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                     {
                         set_pet_visible(app, true);
                     }
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "obs_hide_pet" => {
                     let (port, updated) = {
@@ -832,7 +832,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                     if !state.paused_guard.load(std::sync::atomic::Ordering::Relaxed) {
                         set_pet_visible(app, !crate::should_hide_desktop_pet(&updated));
                     }
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "obs_open_browser" => {
                     let (port, enabled_changed, updated) = {
@@ -850,7 +850,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                     crate::obs::sync_obs_server(app, true, port);
                     if enabled_changed {
                         sync_checkmarks(&updated);
-                        let _ = app.emit("kuro-settings", updated);
+                        let _ = app.emit("dshpet-settings", updated);
                     }
                     // dsh-pet v2.0: open_url_in_browser moved to lib.rs after updater strip.
                     crate::open_url_in_browser_pub(&crate::obs::obs_url(port));
@@ -878,7 +878,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                     {
                         set_pet_visible(app, !next_hide);
                     }
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "live_hide_pet" => {
                     let (was_enabled, updated) = {
@@ -906,7 +906,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                     if !state.paused_guard.load(std::sync::atomic::Ordering::Relaxed) {
                         set_pet_visible(app, !crate::should_hide_desktop_pet(&updated));
                     }
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "mcp_toggle" => {
                     let updated = {
@@ -920,7 +920,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                         s.clone()
                     };
                     sync_checkmarks(&updated);
-                    let _ = app.emit("kuro-settings", updated);
+                    let _ = app.emit("dshpet-settings", updated);
                 }
                 "breed_black" => apply_breed_and_save(app, "black"),
                 "breed_ragdoll" => apply_breed_and_save(app, "ragdoll"),
@@ -945,7 +945,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                 "tail_off" => apply_tail_key_mode_and_save(app, "off"),
                 "tail_pick_keys" => {
                     set_pet_visible(app, true);
-                    let _ = app.emit("kuro-open-tail-picker", ());
+                    let _ = app.emit("dshpet-open-tail-picker", ());
                 }
                 "fps_60" => apply_fps_cap_and_save(app, 0),
                 "fps_30" => apply_fps_cap_and_save(app, 30),

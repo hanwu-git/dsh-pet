@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   DEFAULT_TAIL_KEY_IDS,
-  KuroCatEngine,
+  PetEngine,
   type KeyboardOrientation,
   type PeekEdge,
   type TailKeyMode,
@@ -19,7 +19,7 @@ import {
   type KeyboardLayoutId,
   type KeySpec,
 } from './keyboardLayout';
-import type { CollarColorId, KuroCatEngine3D } from './catEngine3d';
+import type { CollarColorId, PetEngine3D } from './catEngine3d';
 import {
   applyDomTranslations,
   isMacPlatform,
@@ -101,7 +101,7 @@ interface UpdateProgressEvent {
   info: UpdateInfo | null;
 }
 
-const DISMISSED_UPDATE_STORAGE_KEY = 'kurocat_dismissed_update_version';
+const DISMISSED_UPDATE_STORAGE_KEY = 'dshpet_dismissed_update_version';
 
 function loadDismissedVersion(): string | null {
   try {
@@ -126,7 +126,7 @@ let updateBusy = false;
 let dismissedVersion: string | null = loadDismissedVersion();
 let currentToastKind: 'update' | 'admin' | 'transient' | null = null;
 let toastAutoHideTimer: number | null = null;
-const ADMIN_HINT_DISMISSED_KEY = 'kurocat_admin_game_hint_dismissed';
+const ADMIN_HINT_DISMISSED_KEY = 'dshpet_admin_game_hint_dismissed';
 let adminHintShownThisSession = false;
 let sliderDragging = false;
 let opacitySliderDragging = false;
@@ -200,13 +200,13 @@ const btnTailCancelEl = document.getElementById('btn-tail-cancel') as HTMLButton
 const tailModeBadgeEl = document.getElementById('tail-mode-badge') as HTMLSpanElement;
 const tailKeysCountEl = document.getElementById('tail-keys-count') as HTMLSpanElement;
 const agentBubbleEl = document.getElementById('agent-bubble') as HTMLDivElement | null;
-const engine = new KuroCatEngine(canvas);
+const engine = new PetEngine(canvas);
 engine.onDeepSleep = () => {
   void invoke('trim_idle_memory').catch(() => {});
 };
 
 // Lazy-loaded Three.js 3D engine (NEVER imported when user stays in 2D mode -> +0 MB overhead!)
-let engine3d: KuroCatEngine3D | null = null;
+let engine3d: PetEngine3D | null = null;
 let loading3dPromise: Promise<void> | null = null;
 let dispose3dTimer: number | null = null;
 const IDLE_3D_DISPOSE_MS = 8000;
@@ -411,11 +411,11 @@ function activateRenderEngine(): void {
       replaceCanvas3d();
     }
     loading3dPromise = import('./catEngine3d')
-      .then(({ KuroCatEngine3D }) => {
+      .then(({ PetEngine3D }) => {
         if (canvas3dDirty) {
           replaceCanvas3d();
         }
-        const created = new KuroCatEngine3D(canvas3d, { embedded: false });
+        const created = new PetEngine3D(canvas3d, { embedded: false });
         if (created.isContextLost()) {
           created.dispose();
           replaceCanvas3d();
@@ -458,7 +458,7 @@ function formatHeaderCatName(cat: CatSkinConfig): string {
     cat.emoji && displayName.startsWith(cat.emoji)
       ? displayName.slice(cat.emoji.length).trimStart()
       : displayName;
-  return `${emoji} KuroCat ${bareName}`;
+  return `${emoji} DSH Pet ${bareName}`;
 }
 
 function renderBreedPills(): void {
@@ -903,7 +903,7 @@ async function createDesktopShortcut(): Promise<void> {
       hint.textContent = t('menu.created_hint');
       hint.classList.add('copied');
       setTimeout(() => {
-        hint.textContent = 'KuroCat';
+        hint.textContent = 'DSH Pet';
         hint.classList.remove('copied');
       }, 1800);
     }
@@ -1155,7 +1155,7 @@ async function bootstrap(): Promise<void> {
     console.error('Failed to load settings or cats:', err);
   }
 
-  await listen<UpdateProgressEvent>('kuro-update-status', (ev) => {
+  await listen<UpdateProgressEvent>('dshpet-update-status', (ev) => {
     handleUpdateProgressEvent(ev.payload, false);
   });
 
@@ -1178,7 +1178,7 @@ async function bootstrap(): Promise<void> {
 
   btnToastOpenEl.addEventListener('click', (e) => {
     e.stopPropagation();
-    const url = latestUpdateInfo?.releaseUrl || 'https://github.com/qianyiai/KuroCat/releases/latest';
+    const url = latestUpdateInfo?.releaseUrl || 'https://github.com/hanwu-git/dsh-pet';
     void invoke('open_release_page', { url });
   });
 
@@ -1270,7 +1270,7 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  await listen<AppSettings>('kuro-settings', (ev) => {
+  await listen<AppSettings>('dshpet-settings', (ev) => {
     const prevLock = lastKnownLockState;
     const prevRenderMode = settings.renderMode;
     settings = ev.payload;
@@ -1295,24 +1295,24 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  await listen<CatSkinConfig[]>('kuro-cats', (ev) => {
+  await listen<CatSkinConfig[]>('dshpet-cats', (ev) => {
     if (Array.isArray(ev.payload) && ev.payload.length > 0) {
       catList = ev.payload;
       syncMenuUI();
     }
   });
 
-  await listen('kuro-open-tail-picker', () => {
+  await listen('dshpet-open-tail-picker', () => {
     void openTailPicker();
   });
 
-  await listen<number>('kuro-scale-preview', (ev) => {
+  await listen<number>('dshpet-scale-preview', (ev) => {
     if (typeof ev.payload === 'number' && Number.isFinite(ev.payload)) {
       engine.setRenderScale(Math.max(0.2, Math.min(1.5, ev.payload)));
     }
   });
 
-  await listen<number>('kuro-opacity-preview', (ev) => {
+  await listen<number>('dshpet-opacity-preview', (ev) => {
     if (typeof ev.payload === 'number' && Number.isFinite(ev.payload)) {
       applyPetOpacity(ev.payload);
     }
@@ -1360,7 +1360,7 @@ async function bootstrap(): Promise<void> {
     return (normX * 2 - 1) * 0.35;
   };
 
-  await listen<InputEvent>('kuro-input', (ev) => {
+  await listen<InputEvent>('dshpet-input', (ev) => {
     const p = ev.payload;
     switch (p.kind) {
       case 'keyDown':
@@ -1433,32 +1433,32 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  await listen<boolean>('kuro-privacy', (ev) => {
+  await listen<boolean>('dshpet-privacy', (ev) => {
     privacyActive = Boolean(ev.payload);
     engine.setPrivacyMode(privacyActive);
     engine3d?.setPrivacyMode(privacyActive);
     agentCompanion.setPrivacyMode(privacyActive);
   });
 
-  await listen<AgentCompanionEvent>('kuro-agent-event', (ev) => {
+  await listen<AgentCompanionEvent>('dshpet-agent-event', (ev) => {
     agentCompanion.handleEvent(ev.payload);
   });
 
-  await listen<string>('kuro-peek-edge', (ev) => {
+  await listen<string>('dshpet-peek-edge', (ev) => {
     const raw = ev.payload;
     const edge: PeekEdge = raw === 'left' || raw === 'right' ? raw : 'none';
     engine.setPeekEdge(edge);
     engine3d?.setPeekEdge(edge);
   });
 
-  await listen<string>('kuro-peek-preview', (ev) => {
+  await listen<string>('dshpet-peek-preview', (ev) => {
     const raw = ev.payload;
     const edge: PeekEdge = raw === 'left' || raw === 'right' ? raw : 'none';
     engine.setPeekPreview(edge);
     engine3d?.setPeekPreview(edge);
   });
 
-  await listen<boolean>('kuro-native-drag', (ev) => {
+  await listen<boolean>('dshpet-native-drag', (ev) => {
     const active = Boolean(ev.payload);
     nativeDragActive = active;
     if (active) {
@@ -1498,7 +1498,7 @@ async function bootstrap(): Promise<void> {
     // non-Tauri or older backend
   }
 
-  await listen<{ active?: boolean; gameName?: string | null; needsAdmin?: boolean }>('kuro-game-active', (ev) => {
+  await listen<{ active?: boolean; gameName?: string | null; needsAdmin?: boolean }>('dshpet-game-active', (ev) => {
     gameActive = Boolean(ev.payload?.active);
     const wearNow = shouldWearHeadphonesNow();
     engine.setGameActive(gameActive);
@@ -1524,7 +1524,7 @@ async function bootstrap(): Promise<void> {
   });
 
   let lastPetHover = false;
-  await listen<WindowCursorInfo>('kuro-cursor', (ev) => {
+  await listen<WindowCursorInfo>('dshpet-cursor', (ev) => {
     const c = ev.payload;
     altOverride = Boolean(c.altOverride);
     if (active3d && engine3d) engine3d.onWindowCursor(c.relX, c.relY, c.overCat);
@@ -1989,13 +1989,13 @@ async function bootstrap(): Promise<void> {
       };
       syncWin7OverlayFn = syncWin7Overlay;
 
-      await listen<{ x: number; y: number }>('kuro-win7-contextmenu', (ev) => {
+      await listen<{ x: number; y: number }>('dshpet-win7-contextmenu', (ev) => {
         openContextMenu(ev.payload.x, ev.payload.y);
       });
-      await listen('kuro-win7-close-menu', () => {
+      await listen('dshpet-win7-close-menu', () => {
         closeContextMenu();
       });
-      await listen<boolean>('kuro-win7-visibility', (ev) => {
+      await listen<boolean>('dshpet-win7-visibility', (ev) => {
         win7Visible = Boolean(ev.payload);
         if (win7Visible) {
           lastFrameKey = '';

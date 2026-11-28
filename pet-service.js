@@ -11,7 +11,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as kuroBridge from "./kurocat-bridge.js";
+import * as petBridge from "./pet-bridge.js";
 
 const packageDir = dirname(fileURLToPath(import.meta.url));
 
@@ -26,7 +26,7 @@ export const name = "border-collie-pet-host";
 /** Service fields the function plugin touches: webServer for the RPC route, connection for the
  * trust fence. Task signals arrive as plain ctx.on emissions, so no other fields are needed. */
 export const inject = ["webServer", "connection"];
-export const BUILD = "v3-kurocat-bridge-2026-11-27";
+export const BUILD = "v4-dshpet-rebrand";
 
 const stateDir = join(packageDir, ".companion");
 const stateFile = join(stateDir, "state.json");
@@ -45,7 +45,7 @@ const DEFAULT_SETTINGS = {
   // "kurocat" = delegate the pet role to a locally running KuroCat (bridge forwards events).
   petMode: "collie",
   // KuroCat bridge: on by default (zero cost when KuroCat is not running), port 27420.
-  kurocat: true, kurocatPort: 27420, kurocatAutostart: false,
+  petBridge: true, petPort: 27420, petAutostart: false,
 };
 const VALID_SIZES = ["large", "medium", "small"];
 const VALID_PET_MODES = ["collie", "kurocat"];
@@ -75,19 +75,25 @@ const PET_PNG = join(packageDir, "pet-flat.png");
 // Vendored pet exe resolution order (RELEASE only — a debug build loads its frontend from
 // the devUrl (http://localhost:1420) and shows a WebView "cannot access page" without a
 // dev server; release builds embed frontendDist):
-// 1. packaged copy shipped with the plugin (pet-exe/KuroCat.exe) — present in installs
-//    from the plugin market, no Rust toolchain needed;
-// 2. local cargo output (pet/src-tauri/target/release/KuroCat.exe) — for source checkouts;
+// 1. packaged copy shipped with the plugin (pet-exe/DshPet.exe) — present in installs from
+//    the plugin market, no Rust toolchain needed;
+// 2. local cargo output (pet/src-tauri/target/release/DshPet.exe) — for source checkouts;
 // 3. local cargo debug output — development only;
-// 4. user-installed official KuroCat (kurocat-bridge's own candidates).
-const PACKAGED_PET_EXE = join(packageDir, "pet-exe", "KuroCat.exe");
-const EMBEDDED_PET_RELEASE_EXE = join(packageDir, "pet", "src-tauri", "target", "release", "KuroCat.exe");
-const EMBEDDED_PET_DEBUG_EXE = join(packageDir, "pet", "src-tauri", "target", "debug", "KuroCat.exe");
-const EMBEDDED_PET_EXE = existsSync(PACKAGED_PET_EXE)
-  ? PACKAGED_PET_EXE
-  : (existsSync(EMBEDDED_PET_RELEASE_EXE)
-    ? EMBEDDED_PET_RELEASE_EXE
-    : (existsSync(EMBEDDED_PET_DEBUG_EXE) ? EMBEDDED_PET_DEBUG_EXE : null));
+// 4. legacy KuroCat.exe names (pre-rebrand packaged copies and the official build).
+const PACKAGED_PET_EXE = join(packageDir, "pet-exe", "DshPet.exe");
+const PACKAGED_PET_EXE_LEGACY = join(packageDir, "pet-exe", "KuroCat.exe");
+const EMBEDDED_PET_RELEASE_EXE = join(packageDir, "pet", "src-tauri", "target", "release", "DshPet.exe");
+const EMBEDDED_PET_RELEASE_EXE_LEGACY = join(packageDir, "pet", "src-tauri", "target", "release", "KuroCat.exe");
+const EMBEDDED_PET_DEBUG_EXE = join(packageDir, "pet", "src-tauri", "target", "debug", "DshPet.exe");
+const EMBEDDED_PET_DEBUG_EXE_LEGACY = join(packageDir, "pet", "src-tauri", "target", "debug", "KuroCat.exe");
+const EMBEDDED_PET_EXE = [
+  PACKAGED_PET_EXE,
+  EMBEDDED_PET_RELEASE_EXE,
+  PACKAGED_PET_EXE_LEGACY,
+  EMBEDDED_PET_RELEASE_EXE_LEGACY,
+  EMBEDDED_PET_DEBUG_EXE,
+  EMBEDDED_PET_DEBUG_EXE_LEGACY,
+].find((p) => existsSync(p)) ?? null;
 // Win32 helper that brings the DSH main window to the foreground (same enumeration logic
 // as companion.py). Fired when a "waiting" event flows to the KuroCat pet, so the user is
 // pulled back to the conversation that needs them.
@@ -187,15 +193,21 @@ function readSettings() {
     // If "custom" is set but the file is gone, fall back to "default" so nothing breaks.
     let image = raw && raw.image === "custom" ? "custom" : "default";
     if (image === "custom" && !existsSync(CUSTOM_PET_FILE)) image = "default";
-    const petMode = raw && (raw.petMode === "kurocat" || raw.petMode === "kurocat-external")
-      ? "kurocat" // legacy external mode collapses into the embedded mode (external removed in 2.0.1)
-      : (VALID_PET_MODES.includes(raw && raw.petMode) ? raw.petMode : DEFAULT_SETTINGS.petMode);
-    const kurocat = typeof (raw && raw.kurocat) === "boolean" ? raw.kurocat : DEFAULT_SETTINGS.kurocat;
-    const kurocatPort = Number.isInteger(raw && raw.kurocatPort) && raw.kurocatPort > 0 && raw.kurocatPort < 65536
-      ? raw.kurocatPort : DEFAULT_SETTINGS.kurocatPort;
-    const kurocatAutostart = typeof (raw && raw.kurocatAutostart) === "boolean"
-      ? raw.kurocatAutostart : DEFAULT_SETTINGS.kurocatAutostart;
-    return { size, sound, image, petMode, kurocat, kurocatPort, kurocatAutostart };
+    // Legacy-key migration: settings written before the rebrand used kurocat*/kurocat:,
+    // and petMode "kurocat"/"kurocat-external". Accept both so upgrades keep user choices.
+    const rawBridge = raw && (typeof raw.petBridge === "boolean" ? raw.petBridge
+      : (typeof raw.kurocat === "boolean" ? raw.kurocat : undefined));
+    const rawPort = raw && (Number.isInteger(raw.petPort) ? raw.petPort : raw.kurocatPort);
+    const rawAutostart = raw && (typeof raw.petAutostart === "boolean" ? raw.petAutostart : raw.kurocatAutostart);
+    const rawMode = raw && (raw.petMode === "kurocat" || raw.petMode === "kurocat-external" ? "kurocat" : raw.petMode);
+    const petMode = rawMode === "kurocat" || rawMode === "cat"
+      ? "kurocat" // "cat" is the post-rebrand alias for the embedded pet
+      : (VALID_PET_MODES.includes(rawMode) ? rawMode : DEFAULT_SETTINGS.petMode);
+    const petBridge = typeof rawBridge === "boolean" ? rawBridge : DEFAULT_SETTINGS.petBridge;
+    const petPort = Number.isInteger(rawPort) && rawPort > 0 && rawPort < 65536
+      ? rawPort : DEFAULT_SETTINGS.petPort;
+    const petAutostart = typeof rawAutostart === "boolean" ? rawAutostart : DEFAULT_SETTINGS.petAutostart;
+    return { size, sound, image, petMode, petBridge, petPort, petAutostart };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
 
@@ -209,22 +221,22 @@ function writeSettings(patch) {
       ? (patch.image === "custom" && !existsSync(CUSTOM_PET_FILE) ? "default" : patch.image)
       : current.image,
     petMode: patch && VALID_PET_MODES.includes(patch.petMode) ? patch.petMode : current.petMode,
-    kurocat: patch && typeof patch.kurocat === "boolean" ? patch.kurocat : current.kurocat,
-    kurocatPort: patch && Number.isInteger(patch.kurocatPort) && patch.kurocatPort > 0 && patch.kurocatPort < 65536
-      ? patch.kurocatPort : current.kurocatPort,
-    kurocatAutostart: patch && typeof patch.kurocatAutostart === "boolean"
-      ? patch.kurocatAutostart : current.kurocatAutostart,
+    petBridge: patch && typeof patch.petBridge === "boolean" ? patch.petBridge : current.petBridge,
+    petPort: patch && Number.isInteger(patch.petPort) && patch.petPort > 0 && patch.petPort < 65536
+      ? patch.petPort : current.petPort,
+    petAutostart: patch && typeof patch.petAutostart === "boolean"
+      ? patch.petAutostart : current.petAutostart,
   };
   try {
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(SETTINGS_FILE, JSON.stringify(next));
-    logLine("settings", { size: next.size, sound: next.sound, image: next.image, petMode: next.petMode, kurocat: next.kurocat, kurocatPort: next.kurocatPort });
+    logLine("settings", { size: next.size, sound: next.sound, image: next.image, petMode: next.petMode, petBridge: next.petBridge, petPort: next.petPort });
   } catch { /* ignore */ }
   // Keep the bridge in sync with persisted settings (enabled flag, port, autostart).
-  kuroBridge.configure({
-    kurocat: next.kurocat,
-    kurocatPort: next.kurocatPort,
-    kurocatAutostart: next.kurocatAutostart,
+  petBridge.configure({
+    petBridge: next.petBridge,
+    petPort: next.petPort,
+    petAutostart: next.petAutostart,
     dataDir: stateDir,
     embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
   });
@@ -232,14 +244,14 @@ function writeSettings(patch) {
   // spawned (an adopted/standalone instance is left running — the user owns it).
   if (patch && patch.petMode === "kurocat") {
     if (pinned) setPinned(false);
-    kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, adopted: !!r.adopted, reason: r.reason || "" })).catch(() => {});
+    petBridge.startSidecar().then((r) => logLine("pet-sidecar", { ok: r.ok, adopted: !!r.adopted, reason: r.reason || "" })).catch(() => {});
   } else if (patch && patch.petMode === "collie") {
-    kuroBridge.stopSidecar();
+    petBridge.stopSidecar();
   }
   // Legacy port migration: settings written by 0.6.x carry 27420 (official range); the
   // embedded build lives on 27430+. Rewrite once so the bridge knocks on the right door.
-  if (next.petMode === "kurocat" && next.kurocatPort === 27420 && existsSync(EMBEDDED_PET_EXE)) {
-    return writeSettings({ kurocatPort: 27430 });
+  if (next.petMode === "kurocat" && next.petPort === 27420 && existsSync(EMBEDDED_PET_EXE)) {
+    return writeSettings({ petPort: 27430 });
   }
   return next;
 }
@@ -397,23 +409,23 @@ export function apply(ctx) {
   // autostart). Pet lifecycle per the v2.0 requirements:
   // - The pet may run STANDALONE: if an instance already answers on our port, we adopt it
   //   and start tracking DSH state into it (no second process is ever spawned).
-  // - If not running and petMode=kurocat: autostart setting decides whether we launch it.
+  // - If not running and petMode=petBridge: autostart setting decides whether we launch it.
   // - On DSH exit we do NOT kill it: the web client asks the user (kurocat-exit-choice).
   let kuroMode = false;
   {
     const s = readSettings();
     kuroMode = s.petMode === "kurocat";
-    kuroBridge.configure({
-      kurocat: s.kurocat,
-      kurocatPort: s.kurocatPort,
-      kurocatAutostart: s.kurocatAutostart,
+    petBridge.configure({
+      petBridge: s.petBridge,
+      petPort: s.petPort,
+      petAutostart: s.petAutostart,
       dataDir: stateDir,
       // Vendored exe preferred; bridge falls back to the official install when absent.
       embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
     });
     // Attach to a running instance OR auto-start per settings; either way tracking begins.
     if (kuroMode) {
-      kuroBridge.startSidecar().then((r) => logLine("kurocat-sidecar", { ok: r.ok, adopted: !!r.adopted, reason: r.reason || "" }))
+      petBridge.startSidecar().then((r) => logLine("pet-sidecar", { ok: r.ok, adopted: !!r.adopted, reason: r.reason || "" }))
         .catch(() => {});
     }
   }
@@ -440,7 +452,7 @@ export function apply(ctx) {
   // Bridge gate is read once per activation: KuroCat forwarding follows its own setting and
   // is deliberately decoupled from `pinned` — when the user delegates the pet role to
   // KuroCat, events must flow without pinning the tkinter collie window.
-  const bridgeOn = readSettings().kurocat === true;
+  const bridgeOn = readSettings().petBridge === true;
 
   // Task signals → companion window (only meaningful while pinned) + KuroCat bridge (when
   // enabled and running). Track running sessions per-agent so the status light stays on while
@@ -451,19 +463,19 @@ export function apply(ctx) {
     const id = agent && agent.id;
     if (status === "running") {
       if (id) runningSet.add(id);
-      if (bridgeOn && runningSet.size === 1) kuroBridge.bridgeEvent("runningStart");
+      if (bridgeOn && runningSet.size === 1) petBridge.bridgeEvent("runningStart");
       if (!pinned) return;
       writeState({ active: true });
     } else {
       if (id) runningSet.delete(id);
-      if (bridgeOn && runningSet.size === 0) kuroBridge.bridgeEvent("runningEnd");
+      if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
       if (!pinned) return;
       writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
   });
   ctx.on("agent/error", ({ agent, error }) => {
     const message = String((error && error.message) || "执行出错").slice(0, 60);
-    if (bridgeOn) kuroBridge.bridgeEvent("fail", { message });
+    if (bridgeOn) petBridge.bridgeEvent("fail", { message });
     if (!pinned) return;
     writeState({ fail: { id: agent && agent.id, message } });
   });
@@ -471,7 +483,7 @@ export function apply(ctx) {
     const isAsk = (event.type === "tool/call" && event.data && event.data.name === "ask_user_question")
       || event.type === "approval/asked";
     if (bridgeOn && isAsk) {
-      kuroBridge.bridgeEvent("ask");
+      petBridge.bridgeEvent("ask");
       // Pull the user back: DSH main window to the front + queue navigation to the exact
       // conversation (the client's take-navigation poll delivers it to openSession).
       activateDshWindow();
@@ -513,8 +525,8 @@ export function apply(ctx) {
   // flag), so this heartbeat is the authority: it fires only while runningSet is non-empty.
   // Cheap: one loopback POST every 3s, only while a task runs.
   const workingHeartbeat = setInterval(() => {
-    if (!kuroBridge.isRunning()) return;
-    kuroBridge.bridgeEvent("runningStart", { text: "任务执行中…" });
+    if (!petBridge.isRunning()) return;
+    petBridge.bridgeEvent("runningStart", { text: "任务执行中…" });
   }, 3_000);
   ctx.effect(() => () => clearInterval(workingHeartbeat));
 
@@ -558,8 +570,8 @@ export function apply(ctx) {
         sendJson(res, 200, {
           ok: true, pinned, companion: !!(companion && companion.exitCode === null),
           size: s.size, sound: s.sound, image: s.image,
-          petMode: s.petMode, kurocat: s.kurocat, kurocatPort: s.kurocatPort,
-          kurocatAutostart: s.kurocatAutostart,
+          petMode: s.petMode, petBridge: s.petBridge, petPort: s.petPort,
+          petAutostart: s.petAutostart,
           // Plugin version from package.json, shown in the settings page header.
           version: PLUGIN_VERSION,
           // True when a user-uploaded artwork exists and can be restored via settings.image.
@@ -570,43 +582,43 @@ export function apply(ctx) {
         });
         return;
       }
-      if (action === "kurocat-status") {
+      if (action === "pet-status") {
         // Probe the pet's /health and report bridge state for the settings page. The
         // kurocat-status configure call needs the same embedded-exe preference as apply().
         const s = readSettings();
-        kuroBridge.configure({
-          kurocat: s.kurocat, kurocatPort: s.kurocatPort, kurocatAutostart: s.kurocatAutostart,
+        petBridge.configure({
+          petBridge: s.petBridge, petPort: s.petPort, petAutostart: s.petAutostart,
           dataDir: stateDir,
           embeddedExe: existsSync(EMBEDDED_PET_EXE) ? EMBEDDED_PET_EXE : null,
         });
-        const st = await kuroBridge.status();
+        const st = await petBridge.status();
         // Exit-choice is surfaced so the client knows whether to prompt at DSH exit.
-        sendJson(res, 200, { ok: true, ...st, exitChoice: kuroBridge.getExitChoice() });
+        sendJson(res, 200, { ok: true, ...st, exitChoice: petBridge.getExitChoice() });
         return;
       }
-      if (action === "kurocat-start") {
+      if (action === "pet-start") {
         // Start-or-adopt: never spawns a second instance when one already answers.
-        const r = await kuroBridge.startSidecar();
+        const r = await petBridge.startSidecar();
         sendJson(res, 200, r);
         return;
       }
-      if (action === "kurocat-stop") {
+      if (action === "pet-stop") {
         // Explicit user action only (settings page). DSH exit uses the choice flow below.
-        kuroBridge.stopSidecar();
+        petBridge.stopSidecar();
         sendJson(res, 200, { ok: true });
         return;
       }
-      if (action === "kurocat-exit-choice") {
+      if (action === "pet-exit-choice") {
         // The client asks the user "close the pet too?" at DSH exit and reports the answer.
         // Once remembered, later exits apply it without prompting again. A cleared/null
         // choice re-enables prompting (the settings page offers "ask every time").
         const choice = body && body.choice;
         if (choice === "close" || choice === "keep" || choice === null) {
-          kuroBridge.rememberExitChoice(choice);
-          if (choice === "close") kuroBridge.stopSidecar();
-          sendJson(res, 200, { ok: true, choice: kuroBridge.getExitChoice() });
+          petBridge.rememberExitChoice(choice);
+          if (choice === "close") petBridge.stopSidecar();
+          sendJson(res, 200, { ok: true, choice: petBridge.getExitChoice() });
         } else {
-          sendJson(res, 200, { ok: true, choice: kuroBridge.getExitChoice() });
+          sendJson(res, 200, { ok: true, choice: petBridge.getExitChoice() });
         }
         return;
       }
@@ -634,9 +646,9 @@ export function apply(ctx) {
           sendJson(res, 400, { ok: false, error: "bad petMode" });
           return;
         }
-        if (Object.prototype.hasOwnProperty.call(value, "kurocatPort")
-          && !(Number.isInteger(value.kurocatPort) && value.kurocatPort > 0 && value.kurocatPort < 65536)) {
-          sendJson(res, 400, { ok: false, error: "bad kurocatPort" });
+        if (Object.prototype.hasOwnProperty.call(value, "petPort")
+          && !(Number.isInteger(value.petPort) && value.petPort > 0 && value.petPort < 65536)) {
+          sendJson(res, 400, { ok: false, error: "bad petPort" });
           return;
         }
         // Side effects now live inside writeSettings (so they also fire on apply-time

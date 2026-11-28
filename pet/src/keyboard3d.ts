@@ -528,7 +528,7 @@ function createInstancedKeyTopMaterial(atlasTex: THREE.CanvasTexture): THREE.Sha
 }
 
 /**
- * KuroCat's iconic clean desktop gear in real 3D:
+ * DSH Pet's iconic clean desktop gear in real 3D:
  * - Slightly canted matte-charcoal mechanical keyboard rendered with 2 InstancedMeshes + 1 Texture Atlas
  * - Cordless oval split-plate L/R mini mouse with engraved L/R & dual-color highlight
  */
@@ -572,7 +572,7 @@ export class KeyboardAndMouse3D {
   private readonly tmpMat = new THREE.Matrix4();
   private readonly tmpCol = new THREE.Color();
 
-  // Cordless 3D KuroCat Mini Mouse
+  // Cordless 3D DSH Pet Mini Mouse
   private readonly mouseShape = new THREE.Group();
   private readonly mouseBodyMat: THREE.MeshBasicMaterial;
   private readonly leftBtnMat: THREE.MeshBasicMaterial;
@@ -616,12 +616,12 @@ export class KeyboardAndMouse3D {
       depthTest: false,
     });
 
-    // Subtle playful KuroCat keyboard tilt matching original catEngine.ts
+    // Subtle playful DSH Pet keyboard tilt matching original catEngine.ts
     this.boardGroup.position.set(0.24, 0.015, 1.08);
     this.boardGroup.rotation.set(0.06, -0.042, 0);
     this.deskGroup.add(this.boardGroup);
 
-    // Build Cordless KuroCat Oval Split-Plate Mini Mouse
+    // Build Cordless DSH Pet Oval Split-Plate Mini Mouse
     this.mouseGroup.position.copy(this.mouseHome);
     this.mouseShape.rotation.y = -0.10;
     this.mouseGroup.add(this.mouseShape);

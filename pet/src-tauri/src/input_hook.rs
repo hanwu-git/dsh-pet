@@ -222,7 +222,7 @@ impl KeyDeduplicator {
 }
 
 /// Maps USB HID Usage ID (Usage Page 0x07: Keyboard/Keypad) to Windows VK codes
-/// used by the KuroCat frontend keyboard layout.
+/// used by the DSH Pet frontend keyboard layout.
 #[allow(dead_code)]
 pub fn hid_usage_to_vk(usage: u32) -> Option<u32> {
     let vk = match usage {
@@ -288,7 +288,7 @@ pub fn hid_usage_to_vk(usage: u32) -> Option<u32> {
 }
 
 /// Maps Linux evdev keycodes (`<linux/input-event-codes.h>`, also X11 evdev keycode - 8)
-/// to Windows VK codes used by the KuroCat frontend keyboard layout.
+/// to Windows VK codes used by the DSH Pet frontend keyboard layout.
 #[allow(dead_code)]
 pub fn linux_evdev_to_vk(code: u16) -> Option<u32> {
     let vk = match code {
@@ -410,7 +410,7 @@ pub fn start_global_hooks(app: AppHandle) {
 
         let emit_input = |app: &AppHandle, ev: InputEvent| {
             crate::obs::broadcast_input(&ev);
-            let _ = app.emit("kuro-input", ev);
+            let _ = app.emit("dshpet-input", ev);
         };
 
         let release_all_held =
@@ -1550,11 +1550,11 @@ pub mod macos_hook {
                 "未锁定（正常）".to_string()
             };
             let tip = if !st.accessibility || !st.input_monitoring {
-                "若系统设置里开关亮着但这里显示「未生效」，说明更新版本后系统权限缓存过期：请直接点击托盘「重置旧权限并重新授权」，或在系统设置中先点「-」删除旧 KuroCat 再点「+」重新添加，然后完全退出并重开 KuroCat。"
+                "若系统设置里开关亮着但这里显示「未生效」，说明更新版本后系统权限缓存过期：请直接点击托盘「重置旧权限并重新授权」，或在系统设置中先点「-」删除旧 DSH Pet 再点「+」重新添加，然后完全退出并重开 DSH Pet。"
             } else if st.secure_input_enabled {
                 "检测到系统当前处于「安全键盘输入」锁定状态，macOS 会临时拦截所有全局键盘监听（常见于终端菜单开启了「安全键盘输入」、密码管理器或网银控件）。关闭对应应用或取消勾选后即可立即恢复。"
             } else if st.key_events_received == 0 {
-                "权限均已生效！请先随便敲几下键盘测试；若刚刚才打开权限或使用外置蓝牙键盘/Karabiner 仍无响应，请先完全退出 KuroCat（托盘「退出」）再重新打开，以刷新 macOS 15/26 进程级输入监控令牌。"
+                "权限均已生效！请先随便敲几下键盘测试；若刚刚才打开权限或使用外置蓝牙键盘/Karabiner 仍无响应，请先完全退出 DSH Pet（托盘「退出」）再重新打开，以刷新 macOS 15/26 进程级输入监控令牌。"
             } else {
                 "键盘监听工作正常！"
             };
@@ -1575,7 +1575,7 @@ pub mod macos_hook {
                 .replace('"', "\\\"")
                 .replace('\n', "\\n");
             let script = format!(
-                "display dialog \"{}\" with title \"KuroCat 键盘监听诊断\" buttons {{\"确定\"}} default button \"确定\"",
+                "display dialog \"{}\" with title \"DSH Pet 键盘监听诊断\" buttons {{\"确定\"}} default button \"确定\"",
                 escaped
             );
             let _ = std::process::Command::new("osascript")
@@ -1603,7 +1603,7 @@ pub mod macos_hook {
         }
     }
 
-    const MACOS_BUNDLE_ID: &str = "com.kurocat.pet";
+    const MACOS_BUNDLE_ID: &str = "com.hanwu.dshpet";
 
     fn current_macos_app_bundle() -> Option<std::path::PathBuf> {
         let exe = std::env::current_exe().ok()?;
@@ -3374,25 +3374,25 @@ mod tests {
 
     #[test]
     fn parses_macos_signing_identities_across_adhoc_self_signed_and_dev_id() {
-        let universal_adhoc = "Executable=/Applications/KuroCat.app/Contents/MacOS/KuroCat\n\
+        let universal_adhoc = "Executable=/Applications/DSH Pet.app/Contents/MacOS/DSH Pet\n\
             designated => cdhash H\"c5869ec4f5a71deee3cb204dc12605e18d490ce6\" or cdhash H\"263fe7dab4d157a259f8eded6c69135e7c1658ac\"";
         assert_eq!(
             parse_macos_signing_identity(universal_adhoc).as_deref(),
             Some("cdhash:263fe7dab4d157a259f8eded6c69135e7c1658ac|c5869ec4f5a71deee3cb204dc12605e18d490ce6")
         );
 
-        let self_signed = "Executable=/Applications/KuroCat.app/Contents/MacOS/KuroCat\n\
-            designated => identifier \"com.kurocat.pet\" and certificate leaf = H\"fca9bb6eaaea21c57d42d91e14540d7f576682a3\"";
+        let self_signed = "Executable=/Applications/DSH Pet.app/Contents/MacOS/DSH Pet\n\
+            designated => identifier \"com.hanwu.dshpet\" and certificate leaf = H\"fca9bb6eaaea21c57d42d91e14540d7f576682a3\"";
         assert_eq!(
             parse_macos_signing_identity(self_signed).as_deref(),
             Some("cert:fca9bb6eaaea21c57d42d91e14540d7f576682a3")
         );
 
-        let dev_id = "Executable=/Applications/KuroCat.app/Contents/MacOS/KuroCat\n\
-            designated => identifier \"com.kurocat.pet\" and anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\"";
+        let dev_id = "Executable=/Applications/DSH Pet.app/Contents/MacOS/DSH Pet\n\
+            designated => identifier \"com.hanwu.dshpet\" and anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\"";
         assert_eq!(
             parse_macos_signing_identity(dev_id).as_deref(),
-            Some("dr:identifier \"com.kurocat.pet\" and anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\"")
+            Some("dr:identifier \"com.hanwu.dshpet\" and anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\"")
         );
 
         assert_eq!(parse_macos_signing_identity("code object is not signed at all"), None);

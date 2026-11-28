@@ -143,7 +143,7 @@ pub fn sync_obs_server(app: &AppHandle, enabled: bool, port: u16) {
     let app_handle = app.clone();
 
     let Ok(listener) = TcpListener::bind(("127.0.0.1", actual_port)) else {
-        eprintln!("[KuroCat OBS] Failed to bind 127.0.0.1:{}", actual_port);
+        eprintln!("[DSH Pet OBS] Failed to bind 127.0.0.1:{}", actual_port);
         return;
     };
 

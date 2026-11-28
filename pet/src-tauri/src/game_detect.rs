@@ -1,4 +1,4 @@
-//! Lightweight, anti-cheat-safe automatic game detector for KuroCat gaming headphones.
+//! Lightweight, anti-cheat-safe automatic game detector for DSH Pet gaming headphones.
 //!
 //! - Read-only foreground window/executable metadata query ONLY (never injects DLLs, never opens
 //!   game memory, uses `PROCESS_QUERY_LIMITED_INFORMATION` on Windows).
@@ -28,7 +28,7 @@ pub struct GameActivePayload {
 }
 
 /// Kernel anti-cheat titles where we recommend "Pause & Hide (Anti-Cheat Safe Mode)"
-/// rather than prompting the user to elevate KuroCat as Administrator.
+/// rather than prompting the user to elevate DSH Pet as Administrator.
 const KERNEL_ANTICHEAT_EXES: &[&str] = &[
     "valorant-win64-shipping.exe",
     "deltaforceclient-win64-shipping.exe",
@@ -57,8 +57,8 @@ pub fn should_suggest_admin_elevation(
 /// Known non-game apps (browsers, video players, office, chat, IDEs, streaming tools) that must
 /// NEVER trigger gaming headphones even when playing fullscreen video or running hardware acceleration.
 const EXCLUDED_EXES: &[&str] = &[
-    "kurocat.exe",
-    "kuro-cat-pet.exe",
+    "dshpet.exe",
+    "dsh-pet.exe",
     "explorer.exe",
     "searchhost.exe",
     "shellexperiencehost.exe",
@@ -375,7 +375,7 @@ pub fn classify_macos_foreground(bundle_id: &str, app_name: &str) -> Option<Stri
         || bid.contains("obsproject")
         || bid.contains("videolan.vlc")
         || bid.contains("iina")
-        || bid.contains("kurocat")
+        || bid.contains("dshpet")
     {
         return None;
     }
@@ -419,7 +419,7 @@ pub fn classify_macos_foreground(bundle_id: &str, app_name: &str) -> Option<Stri
 
 /// Starts a super-lightweight background watcher that detects active PC games for BOTH
 /// automatic Game Eco Mode (30 FPS GPU-saving pacing) and optional auto gaming headphones,
-/// emitting `kuro-game-active` to the frontend and OBS.
+/// emitting `dshpet-game-active` to the frontend and OBS.
 pub fn start_game_detection_watcher(
     app: AppHandle,
     _settings: Arc<Mutex<AppSettings>>,
@@ -448,7 +448,7 @@ pub fn start_game_detection_watcher(
                     clear_streak = 0;
                     GAME_ACTIVE.store(false, Ordering::Relaxed);
                     let _ = app.emit(
-                        "kuro-game-active",
+                        "dshpet-game-active",
                         GameActivePayload {
                             active: false,
                             game_name: None,
@@ -477,7 +477,7 @@ pub fn start_game_detection_watcher(
                     active_needs_admin = needs_admin;
                     GAME_ACTIVE.store(true, Ordering::Relaxed);
                     let _ = app.emit(
-                        "kuro-game-active",
+                        "dshpet-game-active",
                         GameActivePayload {
                             active: true,
                             game_name: Some(game_name),
@@ -494,7 +494,7 @@ pub fn start_game_detection_watcher(
                     clear_streak = 0;
                     GAME_ACTIVE.store(false, Ordering::Relaxed);
                     let _ = app.emit(
-                        "kuro-game-active",
+                        "dshpet-game-active",
                         GameActivePayload {
                             active: false,
                             game_name: None,

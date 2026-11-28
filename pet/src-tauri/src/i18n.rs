@@ -67,7 +67,7 @@ fn is_simplified_chinese(normalized: &str) -> bool {
         .any(|sub| matches!(sub, "hant" | "tw" | "hk" | "mo"))
 }
 
-/// Resolve any BCP-47 / POSIX locale tag onto one of KuroCat's 5 shipped catalogs.
+/// Resolve any BCP-47 / POSIX locale tag onto one of DSH Pet's 5 shipped catalogs.
 pub fn resolve_locale_tag(raw: &str) -> &'static str {
     let trimmed = raw.trim();
     if trimmed.is_empty() {

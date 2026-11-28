@@ -373,7 +373,7 @@ function makeBlushTexture(): THREE.CanvasTexture {
 }
 
 /**
- * Analytical anti-aliased GLSL eye shader reproducing original KuroCat's signature eyes:
+ * Analytical anti-aliased GLSL eye shader reproducing original DSH Pet's signature eyes:
  * - Luminous lemon-chartreuse almond-oval with subtle cheeky outward tilt (±0.10 rad)
  * - Clean calm Black Cat stare (no distracting permanent dots), popping starlight catchlights in Curious mode
  * - Zero-seam slanted grumpy upper eyelid clip revealing real 3D shaded fur/mask underneath
@@ -433,7 +433,7 @@ function createEyeShaderMaterial(side: -1 | 1): THREE.ShaderMaterial {
       varying vec2 vEye;
 
       void main() {
-        // Apply KuroCat's subtle cheeky outward eye tilt
+        // Apply DSH Pet's subtle cheeky outward eye tilt
         float ct = cos(uTilt);
         float st = sin(uTilt);
         vec2 rotEye = vec2(vEye.x * ct - vEye.y * st, vEye.x * st + vEye.y * ct);
@@ -496,7 +496,7 @@ function createEyeShaderMaterial(side: -1 | 1): THREE.ShaderMaterial {
 
         col *= (1.0 - lidShadow);
 
-        // Specular catchlights (off on calm Black Cat for iconic KuroCat gaze; sparkles in Curious & light breeds!)
+        // Specular catchlights (off on calm Black Cat for iconic DSH Pet gaze; sparkles in Curious & light breeds!)
         if (uShineAmt > 0.02) {
           float sAmt = clamp(uShineAmt, 0.0, 1.35);
           vec2 d1 = p - (uPupilCenter * 0.42 + vec2(-0.28, 0.32));
@@ -530,7 +530,7 @@ function createEyeShaderMaterial(side: -1 | 1): THREE.ShaderMaterial {
 
 /**
  * Lightweight studio-lit plastic / plush / brushed-metal shader for 3D gaming headphones.
- * Matches KuroCat's volumetric fur key light in `3d` mode and switches cleanly to flat cel colors in `3d-flat`.
+ * Matches DSH Pet's volumetric fur key light in `3d` mode and switches cleanly to flat cel colors in `3d-flat`.
  */
 function createHeadsetMaterial(
   hexColor: string,
@@ -586,11 +586,11 @@ function createHeadsetMaterial(
 }
 
 /**
- * Original KuroCat 3D Engine:
- * Sculpted directly from KuroCat's iconic continuous BODY_SLICES mochi-pear silhouette
+ * Original DSH Pet 3D Engine:
+ * Sculpted directly from DSH Pet's iconic continuous BODY_SLICES mochi-pear silhouette
  * (NO KeyCat white sticker rim, NO bobblehead neck seam, NO tall KeyCat ears, NO wired mouse).
  */
-export class KuroCatEngine3D {
+export class PetEngine3D {
   public showKeyBubbles = true;
   public privacyMode = false;
 
@@ -746,7 +746,7 @@ export class KuroCatEngine3D {
   }> = [];
   private readonly tailLimb: SimpleLimb3D;
   private readonly tailCurve: THREE.CatmullRomCurve3;
-  // Sleek graceful KuroCat tail curving smoothly out to the right & gently curling up at tip
+  // Sleek graceful DSH Pet tail curving smoothly out to the right & gently curling up at tip
   private readonly tailRestPts = [
     new THREE.Vector3(0.56, 0.24, -0.14),
     new THREE.Vector3(0.84, 0.16, -0.18),
@@ -821,7 +821,7 @@ export class KuroCatEngine3D {
   private readonly sPeek = new Spring1D(0, 4.4, 0.72);
   private readonly sPeekHover = new Spring1D(0, 5.8, 0.74);
 
-  // Turntable 360° orbit camera springs (0 = iconic KuroCat elevated front angle)
+  // Turntable 360° orbit camera springs (0 = iconic DSH Pet elevated front angle)
   private orbitAzimuthTarget = 0;
   private orbitElevTarget = 24.5;
   private readonly sOrbitAz = new Spring1D(0, 4.2, 0.86);
@@ -998,7 +998,7 @@ export class KuroCatEngine3D {
     this.desk = new KeyboardAndMouse3D(this.scene);
     this.pawMat = this.furSystem.createMaterial('PAW');
 
-    // 1) Original KuroCat Continuous One-Piece Mochi-Pear Silhouette (exact BODY_SLICES proportions!)
+    // 1) Original DSH Pet Continuous One-Piece Mochi-Pear Silhouette (exact BODY_SLICES proportions!)
     this.catRoot.position.copy(this.homePos);
     this.catRoot.scale.setScalar(0.90);
     this.scene.add(this.catRoot);
@@ -1017,7 +1017,7 @@ export class KuroCatEngine3D {
     this.catShadow.position.set(0, 0.003, 0.02);
     this.catRoot.add(this.catShadow);
 
-    // Exact measured KuroCat BODY_SLICES (forehead 49 -> cheeks 60 -> plush neck 52 -> chest 62 -> belly 70 -> thighs 73 -> base 46)
+    // Exact measured DSH Pet BODY_SLICES (forehead 49 -> cheeks 60 -> plush neck 52 -> chest 62 -> belly 70 -> thighs 73 -> base 46)
     const bodyCurve = new THREE.CatmullRomCurve3(
       [
         [0.0, 0.0],
@@ -1073,7 +1073,7 @@ export class KuroCatEngine3D {
       this.hindPaws.push({ mesh: hp, baseX: bx, baseY: by, baseZ: bz });
     }
 
-    // 3) Optional 3D Collar + Swinging Gold Bell (off by default to stay 100% pure original KuroCat!)
+    // 3) Optional 3D Collar + Swinging Gold Bell (off by default to stay 100% pure original DSH Pet!)
     this.collarR = this.radiusAtY(this.collarY);
     const COLLAR_LIFT = 0.055;
     this.collarMat = withTowardEye(
@@ -1130,7 +1130,7 @@ export class KuroCatEngine3D {
     this.headMount.position.set(0, HEAD_CY, 0);
     this.catRoot.add(this.headMount);
 
-    // 5) Compact Rounded KuroCat 3D Ears (snug, slightly upright triangular cat tips; dynamically reshaped per earShape!)
+    // 5) Compact Rounded DSH Pet 3D Ears (snug, slightly upright triangular cat tips; dynamically reshaped per earShape!)
     this.earGeo = this.buildEarGeometry('cat');
     for (const s of [-1, 1] as const) {
       const g = new THREE.Group();
@@ -1145,10 +1145,10 @@ export class KuroCatEngine3D {
       this.petMeshes.push(mesh);
     }
 
-    // 6) Curved Surface-Conforming KuroCat Eyes + Petting Lazy Slits + Closed Sleep Arcs + Soft Blush
+    // 6) Curved Surface-Conforming DSH Pet Eyes + Petting Lazy Slits + Closed Sleep Arcs + Soft Blush
     for (const s of [-1, 1] as const) {
       const lx = s * 0.232;
-      const ly = 0.105; // headMount local -> world y = 1.665 (exact KuroCat eye line!)
+      const ly = 0.105; // headMount local -> world y = 1.665 (exact DSH Pet eye line!)
 
       const eyeGeo = this.makeCurvedFacePatchGeo(lx, ly, EYE_MAX_RX, EYE_MAX_RY, 0.024, 20);
       const eyeMat = createEyeShaderMaterial(s);
@@ -1167,7 +1167,7 @@ export class KuroCatEngine3D {
       );
       closedArc.mesh.visible = false;
 
-      // Original KuroCat sleek thin lazy-slanted horizontal squint slits when petting!
+      // Original DSH Pet sleek thin lazy-slanted horizontal squint slits when petting!
       const squintSlit = new TaperTube3D(18, 6, this.squintMat, 14);
       squintSlit.update(
         (t, out) => {
@@ -1211,7 +1211,7 @@ export class KuroCatEngine3D {
       });
     }
 
-    // 7) Dainty Short KuroCat Cheek Whiskers + Optional Sculpted Eyebrows (1 static draw call each!)
+    // 7) Dainty Short DSH Pet Cheek Whiskers + Optional Sculpted Eyebrows (1 static draw call each!)
     this.whiskerMesh = new THREE.Mesh(this.buildWhiskersGeometry(), this.whiskerMat);
     this.whiskerMesh.renderOrder = 12;
     this.eyebrowMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.eyebrowMat);
@@ -1304,7 +1304,7 @@ export class KuroCatEngine3D {
     // 8b) Sculpted 3D Gaming Headset (auto-equipped on PC game detection or manual toggle!)
     this.buildGamingHeadset();
 
-    // 9) Graceful Tapered 3D KuroCat Tail (ZERO white border!)
+    // 9) Graceful Tapered 3D DSH Pet Tail (ZERO white border!)
     this.tailCurve = new THREE.CatmullRomCurve3(
       this.tailRestPts.map((q) => q.clone()),
       false,
@@ -1321,7 +1321,7 @@ export class KuroCatEngine3D {
     });
     this.tailHitMeshes.push(this.tailLimb.fill.mesh, ...this.tailLimb.caps);
 
-    // 10) Sleek Unified KuroCat Arms + Soft Sculpted Plush Paws (tuck neatly onto front belly when idle!)
+    // 10) Sleek Unified DSH Pet Arms + Soft Sculpted Plush Paws (tuck neatly onto front belly when idle!)
     const singleToeGeo = new THREE.PlaneGeometry(0.024, 0.28);
     singleToeGeo.rotateX(-Math.PI / 2);
     const mergedToesGeo = mergeStaticGeometries([
@@ -1397,7 +1397,7 @@ export class KuroCatEngine3D {
    * Builds sculpted over-ear gaming headphones on `headMount`:
    * - Arched padded headband curves cleanly behind the cat's ears (zero ear clipping!)
    * - Plush memory-foam cushions hug the chubby cheeks with brushed-titanium yokes
-   * - Luminous KuroCat-lime / cyan-RGB breathing LED rings + curved boom microphone
+   * - Luminous DSH Pet-lime / cyan-RGB breathing LED rings + curved boom microphone
    */
   private buildGamingHeadset(): void {
     const shellMat = createHeadsetMaterial('#242934', 0.28, 0.28, '#8da4c9');
@@ -1577,7 +1577,7 @@ export class KuroCatEngine3D {
     return g;
   }
 
-  /** Exact piecewise-linear radius of our continuous KuroCat Lathe profile at body-local height y ∈ [0, BODY_H]. */
+  /** Exact piecewise-linear radius of our continuous DSH Pet Lathe profile at body-local height y ∈ [0, BODY_H]. */
   private radiusAtY(y: number): number {
     const cy = clamp(y, 0, BODY_H);
     const pts = this.outlineSamplePts;
@@ -3891,7 +3891,7 @@ export class KuroCatEngine3D {
       this.noseMesh.position.y = this.noseBaseY + this.boopCrossEye * 0.018 + this.yawnAmt * 0.014;
     }
 
-    // 5b) Smooth drop-on gaming headset animation + reactive KuroCat-lime/cyan RGB earcup glow!
+    // 5b) Smooth drop-on gaming headset animation + reactive DSH Pet-lime/cyan RGB earcup glow!
     const hsVal = clamp(this.sHeadset.step(this.headsetOn ? 1 : 0, dt), 0, 1.18);
     if (hsVal > 0.015) {
       this.headsetGroup.visible = true;
@@ -3901,7 +3901,7 @@ export class KuroCatEngine3D {
       this.headsetGroup.position.set(0, dropOffset, 0);
       this.headsetGroup.scale.setScalar(sc);
       const rgbMix = 0.5 + 0.5 * Math.sin(t * 2.3 + this.excite * 2.0);
-      // Smoothly breathe between KuroCat neon-lime (#d4f53d) and electric gaming cyan (#3df2e8)
+      // Smoothly breathe between DSH Pet neon-lime (#d4f53d) and electric gaming cyan (#3df2e8)
       const pulse = 0.88 + 0.12 * Math.sin(t * 5.2) + this.excite * 0.16;
       const r = clamp(mix(0.83, 0.24, rgbMix * 0.58) * pulse, 0, 1);
       const g = clamp(mix(0.96, 0.95, rgbMix * 0.58) * pulse, 0, 1);
@@ -3942,7 +3942,7 @@ export class KuroCatEngine3D {
       );
     }
 
-    // 7) Iconic KuroCat Eyes: open / curious / scruff wide / boop cross-eye / grumpy / happy arcs / petting lazy slits / sleep arcs
+    // 7) Iconic DSH Pet Eyes: open / curious / scruff wide / boop cross-eye / grumpy / happy arcs / petting lazy slits / sleep arcs
     if ((curiousNow || scruffWanted || boopActive) && t > this.nextBlink - 0.25) this.nextBlink = t + 0.65;
     let blinkClose = 0;
     if (t >= this.nextBlink) {
@@ -4061,7 +4061,7 @@ export class KuroCatEngine3D {
       }
     }
 
-    // 8) Graceful 3D KuroCat Tail (sway, sleep curl, stretch high curve, scruff dangle, tail poke recoil, tail key patting, 3-beat grumpy desk-thump)
+    // 8) Graceful 3D DSH Pet Tail (sway, sleep curl, stretch high curve, scruff dangle, tail poke recoil, tail key patting, 3-beat grumpy desk-thump)
     let targetThumpLift = 0;
     let targetThumpLash = 0;
     if (cross > 0.08 && this.tailTap.reach < 0.25) {
@@ -4150,7 +4150,7 @@ export class KuroCatEngine3D {
       );
     }
 
-    // 9) Sleek Unified KuroCat Arms + Cozy Tucked Idle Belly Paws + Scruff / Edge-Peek Grip / Groom / Stretch / Knead!
+    // 9) Sleek Unified DSH Pet Arms + Cozy Tucked Idle Belly Paws + Scruff / Edge-Peek Grip / Groom / Stretch / Knead!
     this.headMount.updateMatrixWorld(false);
     const updatePaw = (paw: PawTrack3D, isLeft: boolean) => {
       const activeForMouse = isLeft && mousing && scruff < 0.12 && peek < 0.25;

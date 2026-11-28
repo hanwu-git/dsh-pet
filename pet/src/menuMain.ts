@@ -154,7 +154,7 @@ function formatHeaderCatName(cat: CatSkinConfig): string {
     cat.emoji && displayName.startsWith(cat.emoji)
       ? displayName.slice(cat.emoji.length).trimStart()
       : displayName;
-  return `${emoji} KuroCat · ${bareName}`;
+  return `${emoji} DSH Pet · ${bareName}`;
 }
 
 function switchTab(nextTab: MenuTabId): void {
@@ -935,19 +935,19 @@ async function bootstrap(): Promise<void> {
 
   if (!inTauri) return;
 
-  await listen<AppSettings>('kuro-settings', (ev) => {
+  await listen<AppSettings>('dshpet-settings', (ev) => {
     settings = ev.payload;
     syncUI();
   });
 
-  await listen<CatSkinConfig[]>('kuro-cats', (ev) => {
+  await listen<CatSkinConfig[]>('dshpet-cats', (ev) => {
     if (Array.isArray(ev.payload) && ev.payload.length > 0) {
       catList = ev.payload;
       syncUI();
     }
   });
 
-  await listen<UpdateProgressEvent>('kuro-update-status', (ev) => {
+  await listen<UpdateProgressEvent>('dshpet-update-status', (ev) => {
     if (ev.payload.info) {
       cachedUpdateInfo = ev.payload.info;
     }
@@ -967,7 +967,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  await listen('kuro-menu-opened', async () => {
+  await listen('dshpet-menu-opened', async () => {
     try {
       const [latestSettings, latestCats, cachedUpd, resolvedLoc] = await Promise.all([
         invoke<AppSettings>('get_settings'),

@@ -114,7 +114,7 @@ export function resolveFurPalette3D(skin: CatSkinConfig, style: RenderStyle3D): 
     case 'black':
       return {
         id: 'black',
-        // Pure deep velvety obsidian black matching original KuroCat (#141314) & app icon
+        // Pure deep velvety obsidian black matching original DSH Pet (#141314) & app icon
         fur: '#0d0d0f',
         light: '#0d0d0f',
         dark: '#0d0d0f',
@@ -130,7 +130,7 @@ export function resolveFurPalette3D(skin: CatSkinConfig, style: RenderStyle3D): 
         calico: 0,
         tuxedo: 0,
         points: 0,
-        // Subtle dark slate inner ear scoop in 3D mode (like kurocat-icon.png), pure black in 2D flat mode
+        // Subtle dark slate inner ear scoop in 3D mode (like dshpet-icon.png), pure black in 2D flat mode
         innerAmt: is3D ? 0.42 : 0,
         shade: is3D ? 1.0 : 0,
         paw: '#0e0e11',
@@ -426,7 +426,7 @@ export function resolveFurPalette3D(skin: CatSkinConfig, style: RenderStyle3D): 
 export type FurPart = 'CAT_BODY' | 'EAR' | 'TAIL' | 'ARM' | 'PAW';
 
 /**
- * Unified rest-space GLSL fur shader crafted specifically for KuroCat's
+ * Unified rest-space GLSL fur shader crafted specifically for DSH Pet's
  * continuous one-piece mochi-pear silhouette & soft designer-vinyl studio lighting (NO KeyCat white sticker rim!).
  */
 export class FurShaderSystem {
@@ -610,7 +610,7 @@ export class FurShaderSystem {
         float pa = 0.0, pb = 0.0;
 
         #ifdef CAT_BODY
-          // Unified one-piece KuroCat body+head rest coordinates (y: 0.0 desk -> 1.98 crown, head center at y=1.56)
+          // Unified one-piece DSH Pet body+head rest coordinates (y: 0.0 desk -> 1.98 crown, head center at y=1.56)
           vec3 hp = vec3(p.x / 0.62, (p.y - 1.56) / 0.44, p.z / 0.50);
           float headZone = smoothstep(1.22, 1.42, p.y);
           float torsoZone = 1.0 - smoothstep(1.18, 1.42, p.y);
@@ -817,7 +817,7 @@ export class FurShaderSystem {
           col = mix(col, uTailTip, smoothstep(0.70, 0.90, vAlong) * uTailTipAmt);
         #endif
 
-        // Designer-vinyl / soft matte-velvet 3D studio lighting (inspired by KuroCat app icon — ZERO KeyCat white outline!)
+        // Designer-vinyl / soft matte-velvet 3D studio lighting (inspired by DSH Pet app icon — ZERO KeyCat white outline!)
         vec3 n = normalize(vNormal);
         vec3 v = normalize(vViewDir);
         float ndv = clamp(dot(n, v), 0.0, 1.0);

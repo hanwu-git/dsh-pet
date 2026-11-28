@@ -5,7 +5,7 @@
     "code": "ko-KR"
   },
   "menu": {
-    "header": "🐈‍⬛ KuroCat 검은 고양이",
+    "header": "🐈‍⬛ DSH Pet 검은 고양이",
     "close_title": "메뉴 닫기 (Esc)",
     "tab_appearance": "🐱 외형·반응",
     "tab_system": "⚙️ 키보드·OBS·설정",
@@ -98,7 +98,7 @@
     "live_chroma_green": "그린",
     "live_chroma_magenta": "핑크",
     "live_hide_pet": "방송 창 전용 (바탕화면 고양이 숨김)",
-    "live_guide_hint": "창 캡처 \"KuroCat Live\" → 크로마키",
+    "live_guide_hint": "창 캡처 \"DSH Pet Live\" → 크로마키",
     "toggle_mcp": "MCP 서버 켜기",
     "copy_mcp": "MCP 설정 복사",
     "mcp_hint": "AI 펫",
@@ -139,9 +139,9 @@
     "game_admin_hint": "관리자 권한 게임 · 승격 후 키 동기화"
   },
   "tray": {
-    "tooltip": "KuroCat",
-    "tooltip_admin": "KuroCat (관리자 · 게임 입력 준비됨)",
-    "toggle_show": "KuroCat 표시 / 숨기기",
+    "tooltip": "DSH Pet",
+    "tooltip_admin": "DSH Pet (관리자 · 게임 입력 준비됨)",
+    "toggle_show": "DSH Pet 표시 / 숨기기",
     "pause_guard": "입력 감지 일시정지 및 숨기기 (안티치트 보호)",
     "admin_ready": "✓ 관리자 권한으로 실행 중",
     "admin_restart": "관리자 권한으로 다시 시작 (게임 입력용)",
@@ -158,7 +158,7 @@
     "obs_toggle": "OBS 소스 켜기 (127.0.0.1:{port})",
     "obs_hide_pet": "OBS 전용 표시 (바탕화면 숨김)",
     "obs_open_browser": "브라우저에서 OBS 소스 미리보기",
-    "live_capture_toggle": "방송 도우미 캡처 창 열기 (KuroCat Live)",
+    "live_capture_toggle": "방송 도우미 캡처 창 열기 (DSH Pet Live)",
     "live_hide_pet": "방송 창 전용 (바탕화면 고양이 숨김)",
     "breed_menu": "캐릭터 스킨",
     "scale_menu": "크기",
@@ -185,7 +185,7 @@
     "fps_60": "부드럽게 60 FPS (기본)",
     "fps_30": "절전 30 FPS (저사양 추천)",
     "reset_pos": "우측 하단으로 위치 초기화",
-    "desktop_shortcut": "바탕화면 바로가기 만들기 (KuroCat)",
+    "desktop_shortcut": "바탕화면 바로가기 만들기 (DSH Pet)",
     "mac_input_menu": "입력 감지 및 권한",
     "mac_reset_perms": "기존 권한 초기화 후 재인증 (업데이트 후 무반응 시)",
     "mac_reconnect": "입력 감지 다시 연결 (Karabiner 호환)",
@@ -195,6 +195,6 @@
     "check_update": "업데이트 확인 (v{ver})",
     "interact_menu": "동반 설정",
     "system_menu": "환경 설정",
-    "quit": "KuroCat 종료"
+    "quit": "DSH Pet 종료"
   }
 }

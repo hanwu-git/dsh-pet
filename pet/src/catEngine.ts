@@ -231,7 +231,7 @@ const TAIL_PAT_WINDUP_GAP_MS = 260;
 // per keystroke flips the whole tail silhouette, so the blend factor is smoothed instead.
 const TAIL_CROSS_BLEND_RATE = 9;
 
-export class KuroCatEngine {
+export class PetEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private rafId: number | null = null;
@@ -4656,7 +4656,7 @@ export class KuroCatEngine {
       ctx.fill();
       ctx.stroke();
 
-      // Reactive KuroCat-lime / electric-cyan gaming LED ring!
+      // Reactive DSH Pet-lime / electric-cyan gaming LED ring!
       ctx.save();
       ctx.shadowColor = led.glow;
       ctx.shadowBlur = 0; /* perf: no per-frame blur */

@@ -5,7 +5,7 @@
     "code": "zh-TW"
   },
   "menu": {
-    "header": "🐈‍⬛ KuroCat 小黑貓",
+    "header": "🐈‍⬛ DSH Pet 小黑貓",
     "close_title": "關閉選單 (Esc)",
     "tab_appearance": "🐱 外觀與互動",
     "tab_system": "⚙️ 鍵盤·OBS·系統",
@@ -98,7 +98,7 @@
     "live_chroma_green": "綠幕",
     "live_chroma_magenta": "洋紅",
     "live_hide_pet": "僅直播顯示（隱藏桌面貓）",
-    "live_guide_hint": "視窗捕獲選 KuroCat Live → 開綠幕去背",
+    "live_guide_hint": "視窗捕獲選 DSH Pet Live → 開綠幕去背",
     "toggle_mcp": "開啟 MCP 擴充",
     "copy_mcp": "複製 MCP 設定",
     "mcp_hint": "AI 捏貓",
@@ -139,8 +139,8 @@
     "game_admin_hint": "遊戲以管理員執行，提權後可同步鍵鼠"
   },
   "tray": {
-    "tooltip": "KuroCat",
-    "tooltip_admin": "KuroCat（系統管理員 · 遊戲模式就緒）",
+    "tooltip": "DSH Pet",
+    "tooltip_admin": "DSH Pet（系統管理員 · 遊戲模式就緒）",
     "toggle_show": "顯示 / 隱藏小黑貓",
     "pause_guard": "暫停監聽並隱藏（遊戲反作弊護航）",
     "admin_ready": "✓ 已以系統管理員執行（遊戲鍵鼠就緒）",
@@ -158,7 +158,7 @@
     "obs_toggle": "開啟 OBS 透明直播源 (127.0.0.1:{port})",
     "obs_hide_pet": "僅 OBS 顯示（隱藏桌面貓）",
     "obs_open_browser": "在瀏覽器中預覽 OBS 透明源",
-    "live_capture_toggle": "開啟直播伴侶捕獲視窗 (KuroCat Live)",
+    "live_capture_toggle": "開啟直播伴侶捕獲視窗 (DSH Pet Live)",
     "live_hide_pet": "僅直播窗顯示（隱藏桌面貓）",
     "breed_menu": "角色外觀",
     "scale_menu": "縮放大小",
@@ -185,7 +185,7 @@
     "fps_60": "流暢 60 FPS（預設）",
     "fps_30": "省電 30 FPS（舊電腦推薦）",
     "reset_pos": "重設位置到右下角",
-    "desktop_shortcut": "建立桌面捷徑 (KuroCat)",
+    "desktop_shortcut": "建立桌面捷徑 (DSH Pet)",
     "mac_input_menu": "鍵盤監聽與權限",
     "mac_reset_perms": "重設舊權限並重新授權（升級後無動畫點此）",
     "mac_reconnect": "重新連線鍵盤監聽（相容 Karabiner）",
@@ -195,6 +195,6 @@
     "check_update": "檢查更新 (v{ver})",
     "interact_menu": "陪伴與互動",
     "system_menu": "偏好與系統",
-    "quit": "結束 KuroCat"
+    "quit": "結束 DSH Pet"
   }
 }

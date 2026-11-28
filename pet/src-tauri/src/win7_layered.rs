@@ -301,7 +301,7 @@ fn present_latest_on_thread(hwnd: HWND) {
         let count = h.presented_frames.fetch_add(1, Ordering::Relaxed) + 1;
         // Optional diagnostic frame dump for automated visual verification (only when env var set)
         if count >= 6 && !h.dumped_once.load(Ordering::Relaxed) {
-            if let Ok(dump_path) = std::env::var("KUROCAT_WIN7_ULW_DUMP") {
+            if let Ok(dump_path) = std::env::var("DSHPET_WIN7_ULW_DUMP") {
                 if !dump_path.trim().is_empty()
                     && !h.dumped_once.swap(true, Ordering::AcqRel)
                 {
@@ -486,7 +486,7 @@ unsafe extern "system" fn ulw_wnd_proc(
             }
             let app_opt = hub().app.lock().unwrap().clone();
             if let Some(ref app) = app_opt {
-                let _ = app.emit("kuro-win7-close-menu", ());
+                let _ = app.emit("dshpet-win7-close-menu", ());
                 app.state::<AppState>()
                     .dragging
                     .store(true, Ordering::Relaxed);
@@ -528,7 +528,7 @@ unsafe extern "system" fn ulw_wnd_proc(
                     .unwrap_or(1.0)
                     .max(0.5);
                 let _ = app.emit(
-                    "kuro-win7-contextmenu",
+                    "dshpet-win7-contextmenu",
                     serde_json::json!({
                         "x": px / sf,
                         "y": py / sf,
@@ -567,10 +567,10 @@ pub fn init(app: AppHandle, x: i32, y: i32, w: u32, h: u32, always_on_top: bool)
 
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<bool>();
     let _ = std::thread::Builder::new()
-        .name("kurocat-win7-ulw".to_string())
+        .name("dshpet-win7-ulw".to_string())
         .spawn(move || {
-            let class_name: Vec<u16> = "KuroCatWin7LayeredClass\0".encode_utf16().collect();
-            let title: Vec<u16> = "KuroCat\0".encode_utf16().collect();
+            let class_name: Vec<u16> = "DSH PetWin7LayeredClass\0".encode_utf16().collect();
+            let title: Vec<u16> = "DSH Pet\0".encode_utf16().collect();
             unsafe {
                 let hinst = GetModuleHandleW(std::ptr::null());
                 let wc = WNDCLASSEXW {
@@ -810,7 +810,7 @@ mod tests {
     #[test]
     fn dib_presenter_updates_real_win32_layered_window_with_ulw_alpha() {
         let class_name: Vec<u16> = "STATIC\0".encode_utf16().collect();
-        let title: Vec<u16> = "KuroCatULWUnitTest\0".encode_utf16().collect();
+        let title: Vec<u16> = "DSH PetULWUnitTest\0".encode_utf16().collect();
         unsafe {
             let hinst = GetModuleHandleW(std::ptr::null());
             let hwnd = CreateWindowExW(

@@ -11,11 +11,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const SERVER_NAME: &str = "kurocat";
+const SERVER_NAME: &str = "dshpet";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Real-time AI Coding Companion / pet interaction payload broadcast to both the desktop
-/// pet window (`kuro-agent-event`) and the OBS Browser Source SSE stream (`agentEvent`).
+/// pet window (`dshpet-agent-event`) and the OBS Browser Source SSE stream (`agentEvent`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCompanionEvent {
@@ -478,7 +478,7 @@ fn post_loopback_json(port: u16, path: &str, payload: &Value) -> bool {
     true
 }
 
-/// CLI entrypoint for `KuroCat --hook` used by Antigravity, Claude Code, WorkBuddy, and Codex hooks.
+/// CLI entrypoint for `DSH Pet --hook` used by Antigravity, Claude Code, WorkBuddy, and Codex hooks.
 /// Never blocks, never slows down the AI host (<=250ms timeout), and always outputs `{}` on stdout.
 pub fn run_hook_cli(args: &[String]) {
     let mut source_hint: Option<String> = None;
@@ -651,7 +651,7 @@ fn tool_definitions() -> Value {
     json!([
         {
             "name": "list_cats",
-            "description": "List all available KuroCat desktop pet skins (built-in and custom pets) and show which pet is currently active on screen.",
+            "description": "List all available DSH Pet desktop pet skins (built-in and custom pets) and show which pet is currently active on screen.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -737,7 +737,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "get_settings",
-            "description": "Read current KuroCat desktop pet settings (active pet, 3D/2D mode, scale, bubbles, purr sound, typing sound, always-on-top, click-through lock, fpsCap, language, privacy guard, OBS, Live Capture window, MCP).",
+            "description": "Read current DSH Pet desktop pet settings (active pet, 3D/2D mode, scale, bubbles, purr sound, typing sound, always-on-top, click-through lock, fpsCap, language, privacy guard, OBS, Live Capture window, MCP).",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -746,7 +746,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "update_settings",
-            "description": "Update KuroCat desktop pet settings live across Windows, macOS, and Linux.",
+            "description": "Update DSH Pet desktop pet settings live across Windows, macOS, and Linux.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -774,16 +774,16 @@ fn tool_definitions() -> Value {
                     "obsEnabled": { "type": "boolean" },
                     "obsPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
                     "obsHidePet": { "type": "boolean" },
-                    "liveCaptureEnabled": { "type": "boolean", "description": "Enable/open the borderless chroma-key capture window ('KuroCat Live') for Live Companion Window Capture." },
-                    "liveChromaColor": { "type": "string", "enum": ["blue", "green", "magenta"], "description": "Chroma-key background color for the KuroCat Live capture window ('blue', 'green', or 'magenta')." },
-                    "liveHidePet": { "type": "boolean", "description": "Hide the desktop pet while the KuroCat Live capture window is active." },
+                    "liveCaptureEnabled": { "type": "boolean", "description": "Enable/open the borderless chroma-key capture window ('DSH Pet Live') for Live Companion Window Capture." },
+                    "liveChromaColor": { "type": "string", "enum": ["blue", "green", "magenta"], "description": "Chroma-key background color for the DSH Pet Live capture window ('blue', 'green', or 'magenta')." },
+                    "liveHidePet": { "type": "boolean", "description": "Hide the desktop pet while the DSH Pet Live capture window is active." },
                     "autostart": { "type": "boolean" }
                 }
             }
         },
         {
             "name": "set_agent_status",
-            "description": "Drive KuroCat as an AI Coding Companion: show a floating status bubble above the cat, optionally animate the cat typing code automatically while working, and celebrate or alert when done / waiting / errored.",
+            "description": "Drive DSH Pet as an AI Coding Companion: show a floating status bubble above the cat, optionally animate the cat typing code automatically while working, and celebrate or alert when done / waiting / errored.",
             "inputSchema": {
                 "type": "object",
                 "required": ["status"],
@@ -1174,7 +1174,7 @@ pub fn handle_jsonrpc(
     })
 }
 
-/// Transport 1: Zero-dependency native Stdio MCP server (`KuroCat --mcp`)
+/// Transport 1: Zero-dependency native Stdio MCP server (`DSH Pet --mcp`)
 pub fn run_stdio_mcp() {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -1216,7 +1216,7 @@ pub fn run_stdio_mcp() {
                 let resp = json!({
                     "jsonrpc": "2.0",
                     "id": id,
-                    "result": err_text("MCP server is disabled in KuroCat settings. Enable 'MCP 扩展' in KuroCat's menu or tray.")
+                    "result": err_text("MCP server is disabled in DSH Pet settings. Enable 'MCP 扩展' in DSH Pet's menu or tray.")
                 });
                 let _ = writeln!(out, "{}", resp);
                 let _ = out.flush();
@@ -1393,7 +1393,7 @@ fn handle_http_conn(
             &mut stream,
             "403 Forbidden",
             "application/json; charset=utf-8",
-            r#"{"error":"MCP server is disabled in KuroCat settings"}"#,
+            r#"{"error":"MCP server is disabled in DSH Pet settings"}"#,
         );
         return;
     }

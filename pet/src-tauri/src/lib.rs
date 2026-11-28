@@ -403,7 +403,7 @@ pub fn set_pet_visible(app: &AppHandle, visible: bool) {
     if win_needs_win7_ulw() {
         win7_layered::set_visible(visible);
         if !visible {
-            let _ = app.emit("kuro-win7-close-menu", ());
+            let _ = app.emit("dshpet-win7-close-menu", ());
             win7_layered::set_overlay_active(false);
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.set_position(PhysicalPosition::new(
@@ -414,7 +414,7 @@ pub fn set_pet_visible(app: &AppHandle, visible: bool) {
         } else if on_top {
             win7_layered::reassert_topmost();
         }
-        let _ = app.emit("kuro-win7-visibility", visible);
+        let _ = app.emit("dshpet-win7-visibility", visible);
         return;
     }
 
@@ -478,7 +478,7 @@ pub fn shutdown_pet_windows() {
     release_single_instance_lock();
 }
 
-/// Synchronizes the dedicated borderless chroma-key capture window (`KuroCat Live`) used by
+/// Synchronizes the dedicated borderless chroma-key capture window (`DSH Pet Live`) used by
 /// Douyin / Kuaishou / Huya / Bilibili Live Companion Window Capture + Chroma Key.
 /// Always builds new WebView2 windows on a background thread guarded by `live_creating` so
 /// synchronous Tauri commands and tray menu handlers never deadlock the Windows UI message loop.
@@ -542,7 +542,7 @@ pub fn sync_live_capture_window(app: &AppHandle, enabled: bool, layout: &str) {
             "live",
             tauri::WebviewUrl::App("obs.html?live=1".into()),
         )
-        .title("KuroCat Live")
+        .title("DSH Pet Live")
         .inner_size(lw, lh)
         .min_inner_size(240.0, 170.0)
         .decorations(false)
@@ -557,7 +557,7 @@ pub fn sync_live_capture_window(app: &AppHandle, enabled: bool, layout: &str) {
             Ok(w) => w,
             Err(err) => {
                 eprintln!(
-                    "[kurocat] sync_live_capture_window: failed to build live window: {err}"
+                    "[dshpet] sync_live_capture_window: failed to build live window: {err}"
                 );
                 return;
             }
@@ -602,7 +602,7 @@ pub fn sync_live_capture_window(app: &AppHandle, enabled: bool, layout: &str) {
                         set_pet_visible(&app_ev, true);
                     }
                     tray::sync_checkmarks(&updated);
-                    let _ = app_ev.emit("kuro-settings", updated);
+                    let _ = app_ev.emit("dshpet-settings", updated);
                 }
             }
             _ => {}
@@ -624,7 +624,7 @@ async fn close_live_capture_window(app: AppHandle) {
         set_pet_visible(&app, true);
     }
     tray::sync_checkmarks(&updated);
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
     if let Some(w) = app.get_webview_window("live") {
         let _ = w.destroy();
     }
@@ -757,12 +757,12 @@ fn get_game_active() -> bool {
 fn get_mcp_config() -> String {
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "KuroCat.exe".to_string());
+        .unwrap_or_else(|_| "DshPet.exe".to_string());
     // Pure, conflict-free Stdio MCP config (compatible with Antigravity, Claude Desktop/Code,
     // Cursor, Codex, WorkBuddy, Windsurf, Trae; HTTP Streamable endpoint is also live on /mcp).
     serde_json::to_string_pretty(&serde_json::json!({
         "mcpServers": {
-            "kurocat": {
+            "dshpet": {
                 "command": exe,
                 "args": ["--mcp"]
             }
@@ -779,8 +779,8 @@ fn get_agent_hooks_config(state: State<'_, AppState>) -> String {
     };
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "KuroCat.exe".to_string());
-    let exe_json = serde_json::to_string(&exe).unwrap_or_else(|_| "\"KuroCat.exe\"".to_string());
+        .unwrap_or_else(|_| "DshPet.exe".to_string());
+    let exe_json = serde_json::to_string(&exe).unwrap_or_else(|_| "\"DshPet.exe\"".to_string());
     let agy_cmd = format!("\"{}\" --hook --source Antigravity", exe);
     let claude_cmd = format!("\"{}\" --hook --source Claude", exe);
     let wb_cmd = format!("\"{}\" --hook --source WorkBuddy", exe);
@@ -790,7 +790,7 @@ fn get_agent_hooks_config(state: State<'_, AppState>) -> String {
 
     let config_json = serde_json::to_string_pretty(&serde_json::json!({
         "mcpServers": {
-            "kurocat": {
+            "dshpet": {
                 "command": exe,
                 "args": ["--mcp"]
             }
@@ -840,7 +840,7 @@ fn get_agent_hooks_config(state: State<'_, AppState>) -> String {
             }
         },
         "codex_config_toml": format!(
-            "notify = [{}, \"--hook\", \"--source\", \"Codex\"]\n\n[mcp_servers.kurocat]\ncommand = {}\nargs = [\"--mcp\"]",
+            "notify = [{}, \"--hook\", \"--source\", \"Codex\"]\n\n[mcp_servers.dshpet]\ncommand = {}\nargs = [\"--mcp\"]",
             exe_json, exe_json
         ),
         "qwen_code_hooks": {
@@ -853,7 +853,7 @@ fn get_agent_hooks_config(state: State<'_, AppState>) -> String {
             }
         },
         "antigravity_hooks_json": {
-            "kurocat-companion": {
+            "dshpet-companion": {
                 "SessionStart": [{ "type": "command", "command": agy_cmd, "timeout": 3 }],
                 "PreInvocation": [{ "type": "command", "command": agy_cmd, "timeout": 3 }],
                 "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": agy_cmd, "timeout": 3 }] }],
@@ -875,35 +875,35 @@ fn get_agent_hooks_config(state: State<'_, AppState>) -> String {
     let resolved = crate::i18n::effective_locale(&lang);
     if resolved == "zh-CN" || resolved == "zh-TW" {
         format!(
-            "请帮我把桌面宠物 KuroCat 的**任务状态联动**接入你当前运行的客户端（请自动判断你是 豆包工作版 / WorkBuddy / DeepSeek Harness / Codex / 千问 / Antigravity / Claude Code / Cursor 等，目标是干活时桌宠自动敲键盘，待确认/出错/任务完成时气泡提醒）：\n\
+            "请帮我把桌面宠物 DSH Pet 的**任务状态联动**接入你当前运行的客户端（请自动判断你是 豆包工作版 / WorkBuddy / DeepSeek Harness / Codex / 千问 / Antigravity / Claude Code / Cursor 等，目标是干活时桌宠自动敲键盘，待确认/出错/任务完成时气泡提醒）：\n\
             1. **情况 A — 无本地 hooks 配置文件的桌面端 Agent（如豆包工作版）**：\n\
                - **不要修改别的客户端配置，也不要在项目/桌面目录创建临时 `.ps1` 或 `.json` 脚本文件**；\n\
                - 请直接把下方 `doubao_work_setup.memory_rule` **保存为你的跨会话长期偏好/记忆**，统一通过 UTF-8 JSON 调用本地 `POST http://127.0.0.1:{}/hook` 同步 `working / waiting / error / done`（避免 Windows 命令行中文乱码）。\n\
             2. **情况 B — 支持本地配置文件的 Agent（合并写入，完整保留我原有的其他配置，绝不覆盖删除已有项）**：\n\
-               - 腾讯 WorkBuddy / CodeBuddy：合并 `mcpServers.kurocat` + `workbuddy_hooks`\n\
-               - DeepSeek Harness (`dsh`)：合并 `mcpServers.kurocat` + `deepseek_harness_hooks`\n\
-               - OpenAI Codex CLI：`~/.codex/config.toml`（`[mcp_servers.kurocat]` 与 `notify`）+ `~/.codex/hooks.json`\n\
-               - 千问 Qwen Code：`~/.qwen/settings.json` 合并 `mcpServers.kurocat` + `qwen_code_hooks`\n\
+               - 腾讯 WorkBuddy / CodeBuddy：合并 `mcpServers.dshpet` + `workbuddy_hooks`\n\
+               - DeepSeek Harness (`dsh`)：合并 `mcpServers.dshpet` + `deepseek_harness_hooks`\n\
+               - OpenAI Codex CLI：`~/.codex/config.toml`（`[mcp_servers.dshpet]` 与 `notify`）+ `~/.codex/hooks.json`\n\
+               - 千问 Qwen Code：`~/.qwen/settings.json` 合并 `mcpServers.dshpet` + `qwen_code_hooks`\n\
                - Antigravity（反重力）：`~/.gemini/config/mcp_config.json` + `~/.gemini/config/hooks.json`\n\
-               - Claude Code / Cursor / Windsurf / Trae：合并 `mcpServers.kurocat` + `claude_code_hooks`（也支持 Streamable HTTP `http://127.0.0.1:{}/mcp`）\n\
+               - Claude Code / Cursor / Windsurf / Trae：合并 `mcpServers.dshpet` + `claude_code_hooks`（也支持 Streamable HTTP `http://127.0.0.1:{}/mcp`）\n\
             3. **立刻验收**：请通过 UTF-8 JSON 向 `POST http://127.0.0.1:{}/hook` 发送 `{{\"status\":\"done\",\"source\":\"<你的名字>\",\"text\":\"AI 伴侣配置成功！\"}}` 让我看到小猫冒泡。配置并验收完成后简短回复结果即可，无需额外推荐其他功能。\n\n\
             ```json\n{}\n```",
             port, port, port, config_json
         )
     } else {
         format!(
-            "Please configure **live task-status sync** for the KuroCat desktop pet on your current client (auto-detect whether you are Doubao Work, WorkBuddy, DeepSeek Harness, OpenAI Codex CLI, Qwen Code, Antigravity, Claude Code, Cursor, etc., so the pet auto-types while working and alerts on waiting/error/done):\n\
+            "Please configure **live task-status sync** for the DSH Pet desktop pet on your current client (auto-detect whether you are Doubao Work, WorkBuddy, DeepSeek Harness, OpenAI Codex CLI, Qwen Code, Antigravity, Claude Code, Cursor, etc., so the pet auto-types while working and alerts on waiting/error/done):\n\
             1. **Case A — Desktop Agents without local hooks config files (e.g. Doubao Work)**:\n\
                - **Do NOT touch other clients' config files and do NOT create temporary `.ps1`/`.json` scripts in my workspace**;\n\
                - Save `doubao_work_setup.memory_rule` into your **long-term memory / preferences** so future chats automatically POST UTF-8 JSON to `http://127.0.0.1:{}/hook` (`working` / `waiting` / `error` / `done`).\n\
             2. **Case B — Clients with local config files (MERGE cleanly without overwriting existing entries)**:\n\
-               - WorkBuddy / CodeBuddy: merge `mcpServers.kurocat` + `workbuddy_hooks`\n\
-               - DeepSeek Harness (`dsh`): merge `mcpServers.kurocat` + `deepseek_harness_hooks`\n\
-               - OpenAI Codex CLI: `~/.codex/config.toml` (`[mcp_servers.kurocat]` + `notify`) + `~/.codex/hooks.json`\n\
-               - Qwen Code: `~/.qwen/settings.json` (`mcpServers.kurocat` + `qwen_code_hooks`)\n\
+               - WorkBuddy / CodeBuddy: merge `mcpServers.dshpet` + `workbuddy_hooks`\n\
+               - DeepSeek Harness (`dsh`): merge `mcpServers.dshpet` + `deepseek_harness_hooks`\n\
+               - OpenAI Codex CLI: `~/.codex/config.toml` (`[mcp_servers.dshpet]` + `notify`) + `~/.codex/hooks.json`\n\
+               - Qwen Code: `~/.qwen/settings.json` (`mcpServers.dshpet` + `qwen_code_hooks`)\n\
                - Antigravity: `~/.gemini/config/mcp_config.json` + `~/.gemini/config/hooks.json`\n\
-               - Claude Code / Cursor / Windsurf / Trae: merge `mcpServers.kurocat` + `claude_code_hooks` (or Streamable HTTP `http://127.0.0.1:{}/mcp`)\n\
-            3. **Live verification**: POST UTF-8 JSON `{{\"status\":\"done\",\"source\":\"<your-name>\",\"text\":\"KuroCat AI Companion connected!\"}}` to `http://127.0.0.1:{}/hook`, then reply briefly with the result without suggesting extra features.\n\n\
+               - Claude Code / Cursor / Windsurf / Trae: merge `mcpServers.dshpet` + `claude_code_hooks` (or Streamable HTTP `http://127.0.0.1:{}/mcp`)\n\
+            3. **Live verification**: POST UTF-8 JSON `{{\"status\":\"done\",\"source\":\"<your-name>\",\"text\":\"DSH Pet AI Companion connected!\"}}` to `http://127.0.0.1:{}/hook`, then reply briefly with the result without suggesting extra features.\n\n\
             ```json\n{}\n```",
             port, port, port, config_json
         )
@@ -1019,7 +1019,7 @@ fn update_settings(app: AppHandle, state: State<'_, AppState>, mut patch: AppSet
         sync_live_capture_window(&app, patch.live_capture_enabled, &patch.keyboard_layout);
     }
     tray::sync_checkmarks(&patch);
-    let _ = app.emit("kuro-settings", patch.clone());
+    let _ = app.emit("dshpet-settings", patch.clone());
     if patch.language != prev_language {
         tray::refresh_tray_language(&app);
     }
@@ -1205,7 +1205,7 @@ async fn open_context_menu(app: AppHandle) -> Result<(), String> {
                 "menu",
                 tauri::WebviewUrl::App("menu.html".into()),
             )
-            .title("KuroCat Menu")
+            .title("DSH Pet Menu")
             .inner_size(lw, lh)
             .decorations(false)
             .resizable(false)
@@ -1222,7 +1222,7 @@ async fn open_context_menu(app: AppHandle) -> Result<(), String> {
             {
                 Ok(w) => w,
                 Err(err) => {
-                    eprintln!("[kurocat] open_context_menu: failed to build menu window: {err}");
+                    eprintln!("[dshpet] open_context_menu: failed to build menu window: {err}");
                     return Err(err.to_string());
                 }
             };
@@ -1270,7 +1270,7 @@ async fn open_context_menu(app: AppHandle) -> Result<(), String> {
     let _ = menu_win.set_always_on_top(true);
     let _ = menu_win.show();
     let _ = menu_win.set_focus();
-    let _ = app.emit("kuro-menu-opened", ());
+    let _ = app.emit("dshpet-menu-opened", ());
     Ok(())
 }
 
@@ -1289,13 +1289,13 @@ fn close_context_menu(app: AppHandle) {
 fn open_tail_picker_from_menu(app: AppHandle) {
     close_context_menu(app.clone());
     set_pet_visible(&app, true);
-    let _ = app.emit("kuro-open-tail-picker", ());
+    let _ = app.emit("dshpet-open-tail-picker", ());
 }
 
 #[tauri::command]
 fn preview_scale(app: AppHandle, scale: f64) {
     let clamped = scale.clamp(0.20, 1.50);
-    let _ = app.emit("kuro-scale-preview", clamped);
+    let _ = app.emit("dshpet-scale-preview", clamped);
 }
 
 #[tauri::command]
@@ -1305,7 +1305,7 @@ fn preview_opacity(app: AppHandle, opacity: f64) {
     if win_needs_win7_ulw() {
         win7_layered::set_opacity(clamped);
     }
-    let _ = app.emit("kuro-opacity-preview", clamped);
+    let _ = app.emit("dshpet-opacity-preview", clamped);
 }
 
 #[tauri::command]
@@ -1339,7 +1339,7 @@ fn save_tail_picker_selection(
         *settings = updated.clone();
         updated
     };
-    let _ = app.emit("kuro-settings", updated.clone());
+    let _ = app.emit("dshpet-settings", updated.clone());
     Ok(updated)
 }
 
@@ -1358,7 +1358,7 @@ struct WinDragGuard {
 impl Drop for WinDragGuard {
     fn drop(&mut self) {
         if let Some(app) = self.app.take() {
-            let _ = app.emit("kuro-native-drag", false);
+            let _ = app.emit("dshpet-native-drag", false);
         }
         self.dragging.store(false, Ordering::Release);
         WIN_NATIVE_DRAG_ACTIVE.store(false, Ordering::Release);
@@ -1469,7 +1469,7 @@ fn run_windows_native_drag(app: AppHandle, initial_cursor: Option<(i32, i32)>) -
 
     if from_fallback {
         guard.app = Some(app.clone());
-        let _ = app.emit("kuro-native-drag", true);
+        let _ = app.emit("dshpet-native-drag", true);
     }
 
     let pulled_from_edge: &'static str = peek_edge_state
@@ -1485,7 +1485,7 @@ fn run_windows_native_drag(app: AppHandle, initial_cursor: Option<(i32, i32)>) -
         })
         .unwrap_or("none");
     if pulled_from_edge != "none" {
-        let _ = app.emit("kuro-peek-edge", "none");
+        let _ = app.emit("dshpet-peek-edge", "none");
     }
     if let Ok(mut g) = peek_preview_state.lock() {
         *g = "none".to_string();
@@ -1638,7 +1638,7 @@ fn run_windows_native_drag(app: AppHandle, initial_cursor: Option<(i32, i32)>) -
                     if let Ok(mut g) = peek_preview_state.lock() {
                         *g = "none".to_string();
                     }
-                    let _ = app.emit("kuro-peek-preview", "none");
+                    let _ = app.emit("dshpet-peek-preview", "none");
                 }
             } else {
                 if raw_edge != candidate_edge {
@@ -1652,7 +1652,7 @@ fn run_windows_native_drag(app: AppHandle, initial_cursor: Option<(i32, i32)>) -
                     if let Ok(mut g) = peek_preview_state.lock() {
                         *g = raw_edge.to_string();
                     }
-                    let _ = app.emit("kuro-peek-preview", raw_edge);
+                    let _ = app.emit("dshpet-peek-preview", raw_edge);
                 }
             }
         }
@@ -1688,7 +1688,7 @@ struct MacosDragGuard {
 impl Drop for MacosDragGuard {
     fn drop(&mut self) {
         if let Some(app) = self.app.take() {
-            let _ = app.emit("kuro-native-drag", false);
+            let _ = app.emit("dshpet-native-drag", false);
         }
         self.dragging.store(false, Ordering::Release);
         MACOS_NATIVE_DRAG_ACTIVE.store(false, Ordering::Release);
@@ -1750,7 +1750,7 @@ fn run_macos_native_drag(app: AppHandle, initial_cursor_pts: Option<(f64, f64)>)
 
     if from_fallback {
         guard.app = Some(app.clone());
-        let _ = app.emit("kuro-native-drag", true);
+        let _ = app.emit("dshpet-native-drag", true);
     }
 
     // Record whether this drag is pulling the pet OUT of an existing left/right peek edge,
@@ -1768,7 +1768,7 @@ fn run_macos_native_drag(app: AppHandle, initial_cursor_pts: Option<(f64, f64)>)
         })
         .unwrap_or("none");
     if pulled_from_edge != "none" {
-        let _ = app.emit("kuro-peek-edge", "none");
+        let _ = app.emit("dshpet-peek-edge", "none");
     }
     if let Ok(mut g) = peek_preview_state.lock() {
         *g = "none".to_string();
@@ -1845,7 +1845,7 @@ fn run_macos_native_drag(app: AppHandle, initial_cursor_pts: Option<(f64, f64)>)
                     if let Ok(mut g) = peek_preview_state.lock() {
                         *g = "none".to_string();
                     }
-                    let _ = app.emit("kuro-peek-preview", "none");
+                    let _ = app.emit("dshpet-peek-preview", "none");
                 }
             } else {
                 if raw_edge != candidate_edge {
@@ -1859,7 +1859,7 @@ fn run_macos_native_drag(app: AppHandle, initial_cursor_pts: Option<(f64, f64)>)
                     if let Ok(mut g) = peek_preview_state.lock() {
                         *g = raw_edge.to_string();
                     }
-                    let _ = app.emit("kuro-peek-preview", raw_edge);
+                    let _ = app.emit("dshpet-peek-preview", raw_edge);
                 }
             }
         } else {
@@ -1901,8 +1901,8 @@ fn clear_peek_state(app: &AppHandle) {
     if let Ok(mut guard) = state.peek_edge.lock() {
         *guard = "none".to_string();
     }
-    let _ = app.emit("kuro-peek-preview", "none");
-    let _ = app.emit("kuro-peek-edge", "none");
+    let _ = app.emit("dshpet-peek-preview", "none");
+    let _ = app.emit("dshpet-peek-edge", "none");
 }
 
 #[tauri::command]
@@ -1917,8 +1917,8 @@ fn set_peek_edge(app: AppHandle, state: State<'_, AppState>, edge: String) {
     if let Ok(mut guard) = state.peek_edge.lock() {
         *guard = clean.clone();
     }
-    let _ = app.emit("kuro-peek-preview", "none");
-    let _ = app.emit("kuro-peek-edge", clean);
+    let _ = app.emit("dshpet-peek-preview", "none");
+    let _ = app.emit("dshpet-peek-edge", clean);
 }
 
 /// Corner-safe screen-edge peek intent detector (left/right vertical edges only):
@@ -2033,7 +2033,7 @@ fn finalize_peek_edge_for_app(app: &AppHandle) -> String {
             v
         })
         .unwrap_or_else(|_| "none".to_string());
-    let _ = app.emit("kuro-peek-preview", "none");
+    let _ = app.emit("dshpet-peek-preview", "none");
 
     #[cfg(target_os = "macos")]
     let detected = {
@@ -2178,7 +2178,7 @@ fn finalize_peek_edge_for_app(app: &AppHandle) -> String {
     if let Ok(mut guard) = state.peek_edge.lock() {
         *guard = detected.clone();
     }
-    let _ = app.emit("kuro-peek-edge", detected.clone());
+    let _ = app.emit("dshpet-peek-edge", detected.clone());
     detected
 }
 
@@ -2241,7 +2241,7 @@ static LINUX_LIVE_PREVIEW_RAN: AtomicBool = AtomicBool::new(false);
 /// On Linux, `gtk::Window::begin_move_drag` (`startDragging()`) returns immediately (~1ms)
 /// before the user actually releases the mouse button. This command blocks until X11 `Button1Mask`
 /// is released while running the same `pulled_from_edge` suppression + 200ms dwell live
-/// `kuro-peek-preview` loop used on Windows and macOS. Returns `false` on pure Wayland without X11
+/// `dshpet-peek-preview` loop used on Windows and macOS. Returns `false` on pure Wayland without X11
 /// so the frontend can fall back to awaiting `mouseUp`.
 #[tauri::command]
 async fn wait_linux_drag_end(app: AppHandle) -> bool {
@@ -2258,7 +2258,7 @@ async fn wait_linux_drag_end(app: AppHandle) -> bool {
             })
             .unwrap_or_else(|_| "none".to_string());
         if pulled_from_edge != "none" {
-            let _ = app.emit("kuro-peek-edge", "none");
+            let _ = app.emit("dshpet-peek-edge", "none");
         }
         let peek_preview_state = state.peek_preview_edge.clone();
         if let Ok(mut g) = peek_preview_state.lock() {
@@ -2343,7 +2343,7 @@ async fn wait_linux_drag_end(app: AppHandle) -> bool {
                                     if let Ok(mut g) = peek_preview_state.lock() {
                                         *g = "none".to_string();
                                     }
-                                    let _ = drag_app.emit("kuro-peek-preview", "none");
+                                    let _ = drag_app.emit("dshpet-peek-preview", "none");
                                 }
                             } else {
                                 if raw_edge != candidate_edge {
@@ -2357,7 +2357,7 @@ async fn wait_linux_drag_end(app: AppHandle) -> bool {
                                     if let Ok(mut g) = peek_preview_state.lock() {
                                         *g = raw_edge.to_string();
                                     }
-                                    let _ = drag_app.emit("kuro-peek-preview", raw_edge);
+                                    let _ = drag_app.emit("dshpet-peek-preview", raw_edge);
                                 }
                             }
                         }
@@ -2517,7 +2517,7 @@ fn save_window_pos(app: AppHandle) {
         };
         if let Some(settings) = unpinned {
             let _ = macos_window::refresh_menu(&handle);
-            let _ = handle.emit("kuro-settings", settings);
+            let _ = handle.emit("dshpet-settings", settings);
         }
     });
 }
@@ -2568,7 +2568,7 @@ pub fn apply_breed_and_save(app: &AppHandle, breed: &str) {
         save_settings(&s);
         s.clone()
     };
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 pub fn reload_and_emit_all(app: &AppHandle) {
@@ -2655,8 +2655,8 @@ pub fn reload_and_emit_all(app: &AppHandle) {
         }
     }
 
-    let _ = app.emit("kuro-cats", cats);
-    let _ = app.emit("kuro-settings", disk_settings);
+    let _ = app.emit("dshpet-cats", cats);
+    let _ = app.emit("dshpet-settings", disk_settings);
 }
 
 fn file_mtime(path: &std::path::Path) -> Option<SystemTime> {
@@ -2700,7 +2700,7 @@ pub fn apply_scale_and_save(app: &AppHandle, scale: f64) {
         save_settings(&s);
         s.clone()
     };
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 pub fn apply_keyboard_layout_and_save(app: &AppHandle, layout: &str) {
@@ -2723,7 +2723,7 @@ pub fn apply_keyboard_layout_and_save(app: &AppHandle, layout: &str) {
     if updated.live_capture_enabled {
         sync_live_capture_window(app, true, &updated.keyboard_layout);
     }
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 pub fn apply_keyboard_orientation_and_save(app: &AppHandle, orientation: &str) {
@@ -2735,7 +2735,7 @@ pub fn apply_keyboard_orientation_and_save(app: &AppHandle, orientation: &str) {
         save_settings(&s);
         s.clone()
     };
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 pub fn apply_tail_key_mode_and_save(app: &AppHandle, mode: &str) {
@@ -2747,7 +2747,7 @@ pub fn apply_tail_key_mode_and_save(app: &AppHandle, mode: &str) {
         save_settings(&s);
         s.clone()
     };
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 #[cfg(target_os = "macos")]
@@ -2974,7 +2974,7 @@ fn win_is_iconic(hwnd: windows_sys::Win32::Foundation::HWND) -> bool {
 }
 
 /// Returns true for Windows remote-desktop / VM console windows that should NEVER be covered by
-/// KuroCat when running fullscreen on the same monitor (#40).
+/// DSH Pet when running fullscreen on the same monitor (#40).
 #[cfg(any(windows, test))]
 pub(crate) fn is_remote_desktop_window(class_name: &str, exe_name: &str) -> bool {
     if class_name.eq_ignore_ascii_case("TscShellContainerClass") {
@@ -3185,20 +3185,20 @@ fn win_is_ignored_shell_window(hwnd: windows_sys::Win32::Foundation::HWND) -> bo
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum WinYieldAction {
     None,
-    /// An overlapping shell flyout or toast popup is already above KuroCat; suppress topmost fight.
+    /// An overlapping shell flyout or toast popup is already above DSH Pet; suppress topmost fight.
     HoldBelow,
-    /// Place KuroCat directly beneath a topmost flyout/toast while staying above normal windows.
+    /// Place DSH Pet directly beneath a topmost flyout/toast while staying above normal windows.
     PlaceBelowTopmost(isize),
     /// Temporarily drop HWND_TOPMOST behind a fullscreen Remote Desktop or non-topmost shell flyout.
     DemoteBehind(isize),
 }
 
-/// Checks whether KuroCat should yield its `HWND_TOPMOST` Z-order on Windows (#40):
-/// 1. Fullscreen Remote Desktop (`mstsc.exe` / `TscShellContainerClass`, etc.) overlapping KuroCat.
-/// 2. Visible, uncloaked Windows 10/11 Shell flyouts overlapping KuroCat (Clock Calendar,
+/// Checks whether DSH Pet should yield its `HWND_TOPMOST` Z-order on Windows (#40):
+/// 1. Fullscreen Remote Desktop (`mstsc.exe` / `TscShellContainerClass`, etc.) overlapping DSH Pet.
+/// 2. Visible, uncloaked Windows 10/11 Shell flyouts overlapping DSH Pet (Clock Calendar,
 ///    Notification Center, Quick Settings, Tray Overflow, Windows Toast Notifications).
 /// 3. Small/medium `WS_EX_TOPMOST` + (`WS_EX_TOOLWINDOW` | `WS_EX_NOACTIVATE`) notification toast
-///    popups from other apps (e.g. Telegram, WeChat, QQ, Slack) overlapping KuroCat.
+///    popups from other apps (e.g. Telegram, WeChat, QQ, Slack) overlapping DSH Pet.
 #[cfg(windows)]
 fn win_detect_yield_action(
     our_hwnd: windows_sys::Win32::Foundation::HWND,
@@ -3214,7 +3214,7 @@ fn win_detect_yield_action(
         return WinYieldAction::None;
     }
 
-    // 1. Fullscreen Remote Desktop client in the foreground overlapping KuroCat -> yield behind it.
+    // 1. Fullscreen Remote Desktop client in the foreground overlapping DSH Pet -> yield behind it.
     if !fg_hwnd.is_null() && fg_hwnd != our_hwnd && !win_is_iconic(fg_hwnd) {
         let fg_cls = win_window_class_name(fg_hwnd);
         let fg_exe = win_process_exe_name(fg_hwnd);
@@ -3600,7 +3600,7 @@ where
 }
 
 /// Creates a per-session named Win32 Event (`Local\...`) with a permissive DACL so both
-/// standard-integrity and elevated (or cross-admin-credential UAC) KuroCat processes within
+/// standard-integrity and elevated (or cross-admin-credential UAC) DSH Pet processes within
 /// the same interactive logon session can reliably signal each other.
 #[cfg(windows)]
 fn win_create_session_event(
@@ -3658,7 +3658,7 @@ fn win_signal_named_event(name: &str) -> bool {
 /// If `child_process` unexpectedly ended up inside our kill-on-close Job Object (e.g. when UAC
 /// is disabled and `ShellExecuteExW("runas")` spawns a direct child instead of going through
 /// `AppInfo`), clear `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` before exiting so the OS kernel does
-/// not terminate the newly restarted KuroCat instance when the old process exits.
+/// not terminate the newly restarted DSH Pet instance when the old process exits.
 #[cfg(windows)]
 fn win_disarm_job_kill_if_child_in_job(
     child_process: windows_sys::Win32::Foundation::HANDLE,
@@ -3715,94 +3715,94 @@ fn win_admin_restart_alert_text(lang: &str, kind: &str, detail: Option<&str>) ->
         .unwrap_or_default();
     match (lang, kind) {
         ("zh-TW", "handoff_timeout") => (
-            "KuroCat 無法切換為管理員模式".to_string(),
+            "DSH Pet 無法切換為管理員模式".to_string(),
             format!(
-                "新的管理員實例未能順利啟動，已保留目前執行中的 KuroCat。\n如需管理員權限，請先完全退出 KuroCat，再右鍵以管理員身分執行。{}",
+                "新的管理員實例未能順利啟動，已保留目前執行中的 DSH Pet。\n如需管理員權限，請先完全退出 DSH Pet，再右鍵以管理員身分執行。{}",
                 suffix
             ),
         ),
         ("zh-TW", "lock_busy") => (
-            "KuroCat 重新啟動交接逾時".to_string(),
+            "DSH Pet 重新啟動交接逾時".to_string(),
             format!(
-                "舊的 KuroCat 實例仍佔用單實例鎖，新的實例無法接管並已取消啟動。\n請先完全退出原本的 KuroCat 後再試一次。{}",
+                "舊的 DSH Pet 實例仍佔用單實例鎖，新的實例無法接管並已取消啟動。\n請先完全退出原本的 DSH Pet 後再試一次。{}",
                 suffix
             ),
         ),
         ("zh-TW", "startup_error") => (
-            "KuroCat 啟動失敗".to_string(),
-            format!("KuroCat 初始化視窗或 WebView2 時發生錯誤。{}", suffix),
+            "DSH Pet 啟動失敗".to_string(),
+            format!("DSH Pet 初始化視窗或 WebView2 時發生錯誤。{}", suffix),
         ),
         ("ja-JP", "handoff_timeout") => (
-            "KuroCat 管理者モードへの切り替えに失敗".to_string(),
+            "DSH Pet 管理者モードへの切り替えに失敗".to_string(),
             format!(
-                "管理者権限の新しいインスタンスが起動しなかったため、現在の KuroCat を維持しました。\n完全に終了してから右クリックで「管理者として実行」をお試しください。{}",
+                "管理者権限の新しいインスタンスが起動しなかったため、現在の DSH Pet を維持しました。\n完全に終了してから右クリックで「管理者として実行」をお試しください。{}",
                 suffix
             ),
         ),
         ("ja-JP", "lock_busy") => (
-            "KuroCat 再起動の引き継ぎがタイムアウト".to_string(),
+            "DSH Pet 再起動の引き継ぎがタイムアウト".to_string(),
             format!(
-                "以前の KuroCat がまだ終了していないため、新しいインスタンスを起動できませんでした。\n一度終了してから再度起動してください。{}",
+                "以前の DSH Pet がまだ終了していないため、新しいインスタンスを起動できませんでした。\n一度終了してから再度起動してください。{}",
                 suffix
             ),
         ),
         ("ja-JP", "startup_error") => (
-            "KuroCat の起動に失敗".to_string(),
+            "DSH Pet の起動に失敗".to_string(),
             format!("ウィンドウまたは WebView2 の初期化中にエラーが発生しました。{}", suffix),
         ),
         ("ko-KR", "handoff_timeout") => (
-            "KuroCat 관리자 모드 전환 실패".to_string(),
+            "DSH Pet 관리자 모드 전환 실패".to_string(),
             format!(
-                "새 관리자 인스턴스가 정상적으로 시작되지 않아 현재 KuroCat을 계속 유지했습니다.\n완전히 종료한 뒤 마우스 오른쪽 버튼으로 '관리자 권한으로 실행'을 시도해 주세요.{}",
+                "새 관리자 인스턴스가 정상적으로 시작되지 않아 현재 DSH Pet을 계속 유지했습니다.\n완전히 종료한 뒤 마우스 오른쪽 버튼으로 '관리자 권한으로 실행'을 시도해 주세요.{}",
                 suffix
             ),
         ),
         ("ko-KR", "lock_busy") => (
-            "KuroCat 재시작 인수 시간 초과".to_string(),
+            "DSH Pet 재시작 인수 시간 초과".to_string(),
             format!(
-                "이전 KuroCat 인스턴스가 아직 종료되지 않아 새 인스턴스를 시작하지 못했습니다.\n기존 KuroCat을 완전히 종료한 뒤 다시 실행해 주세요.{}",
+                "이전 DSH Pet 인스턴스가 아직 종료되지 않아 새 인스턴스를 시작하지 못했습니다.\n기존 DSH Pet을 완전히 종료한 뒤 다시 실행해 주세요.{}",
                 suffix
             ),
         ),
         ("ko-KR", "startup_error") => (
-            "KuroCat 시작 실패".to_string(),
+            "DSH Pet 시작 실패".to_string(),
             format!("창 또는 WebView2 초기화 중 오류가 발생했습니다.{}", suffix),
         ),
         ("en-US", "handoff_timeout") => (
-            "KuroCat Admin Restart Failed".to_string(),
+            "DSH Pet Admin Restart Failed".to_string(),
             format!(
-                "The elevated KuroCat instance did not finish starting, so the current instance was kept running.\nTo run as administrator, fully quit KuroCat first and then choose \"Run as administrator\".{}",
+                "The elevated DSH Pet instance did not finish starting, so the current instance was kept running.\nTo run as administrator, fully quit DSH Pet first and then choose \"Run as administrator\".{}",
                 suffix
             ),
         ),
         ("en-US", "lock_busy") => (
-            "KuroCat Restart Handoff Timed Out".to_string(),
+            "DSH Pet Restart Handoff Timed Out".to_string(),
             format!(
-                "The previous KuroCat instance is still holding the single-instance lock, so the new instance could not take over.\nPlease fully quit KuroCat and launch it again.{}",
+                "The previous DSH Pet instance is still holding the single-instance lock, so the new instance could not take over.\nPlease fully quit DSH Pet and launch it again.{}",
                 suffix
             ),
         ),
         ("en-US", "startup_error") => (
-            "KuroCat Failed to Start".to_string(),
-            format!("KuroCat failed to initialize its window or WebView2 runtime.{}", suffix),
+            "DSH Pet Failed to Start".to_string(),
+            format!("DSH Pet failed to initialize its window or WebView2 runtime.{}", suffix),
         ),
         (_, "handoff_timeout") => (
-            "KuroCat 管理员重启未完成".to_string(),
+            "DSH Pet 管理员重启未完成".to_string(),
             format!(
-                "新的管理员实例未能顺利启动，已为你保留当前运行中的 KuroCat。\n如需管理员权限，请先完全退出 KuroCat，再右键选择「以管理员身份运行」。{}",
+                "新的管理员实例未能顺利启动，已为你保留当前运行中的 DSH Pet。\n如需管理员权限，请先完全退出 DSH Pet，再右键选择「以管理员身份运行」。{}",
                 suffix
             ),
         ),
         (_, "lock_busy") => (
-            "KuroCat 重启交接超时".to_string(),
+            "DSH Pet 重启交接超时".to_string(),
             format!(
-                "旧的 KuroCat 实例尚未完全退出并释放单实例锁，新实例未能接管。\n请先完全退出旧实例后重新启动。{}",
+                "旧的 DSH Pet 实例尚未完全退出并释放单实例锁，新实例未能接管。\n请先完全退出旧实例后重新启动。{}",
                 suffix
             ),
         ),
         _ => (
-            "KuroCat 启动失败".to_string(),
-            format!("KuroCat 初始化窗口或 WebView2 时发生错误。{}", suffix),
+            "DSH Pet 启动失败".to_string(),
+            format!("DSH Pet 初始化窗口或 WebView2 时发生错误。{}", suffix),
         ),
     }
 }
@@ -3865,7 +3865,7 @@ pub fn win_restart_as_admin(app: AppHandle) {
         };
 
         let nonce = WIN_HANDOFF_NONCE.fetch_add(1, Ordering::Relaxed);
-        let event_name = format!("Local\\KuroCat.AdminHandoff.{}.{}", current_pid, nonce);
+        let event_name = format!("Local\\DSH Pet.AdminHandoff.{}.{}", current_pid, nonce);
         let handoff_ev = win_create_session_event(&event_name, true);
 
         let verb = to_wide(std::ffi::OsStr::new("runas"));
@@ -4584,7 +4584,7 @@ fn start_hit_test_loop(
             }
             // Cross-platform #40 Remote Desktop yield for macOS: temporarily drop from
             // `NSStatusWindowLevel` to `NSNormalWindowLevel` while a Remote Desktop client is
-            // frontmost so KuroCat never obscures the remote session, then restore promptly.
+            // frontmost so DSH Pet never obscures the remote session, then restore promptly.
             #[cfg(target_os = "macos")]
             if always_on_top && !is_menu && picker_bounds.is_none() && !is_drag {
                 if unix_last_rdp_check.elapsed() >= Duration::from_millis(450) {
@@ -4852,7 +4852,7 @@ fn start_hit_test_loop(
                 last_effective_locked = effective_locked;
                 last_cursor_emit = Instant::now();
                 let _ = app.emit(
-                    "kuro-cursor",
+                    "dshpet-cursor",
                     WindowCursorInfo {
                         rel_x: pet_rx,
                         rel_y: pet_ry,
@@ -4892,7 +4892,7 @@ fn win_needs_win7_ulw() -> bool {
     use std::sync::OnceLock;
     static NEEDS_ULW: OnceLock<bool> = OnceLock::new();
     *NEEDS_ULW.get_or_init(|| {
-        for var in ["KUROCAT_WIN7_ULW", "KUROCAT_WIN7_MASK"] {
+        for var in ["DSHPET_WIN7_ULW", "DSHPET_WIN7_MASK"] {
             if let Ok(v) = std::env::var(var) {
                 let t = v.trim();
                 if t == "1" || t.eq_ignore_ascii_case("true") {
@@ -5077,7 +5077,7 @@ fn win_elevated_webview2_user_data_folder(
     exe_dir: &std::path::Path,
 ) -> std::path::PathBuf {
     local_app_data
-        .map(|base| base.join("com.kurocat.pet").join("EBWebView-Admin"))
+        .map(|base| base.join("com.hanwu.dshpet").join("EBWebView-Admin"))
         .unwrap_or_else(|| exe_dir.join("WebView2Data-Admin"))
 }
 
@@ -5107,7 +5107,7 @@ fn win_configure_local_webview2_runtime() {
     {
         let udf = std::env::var_os("LOCALAPPDATA")
             .map(std::path::PathBuf::from)
-            .map(|base| base.join("KuroCat").join("EBWebView-Win7"))
+            .map(|base| base.join("DSH Pet").join("EBWebView-Win7"))
             .unwrap_or_else(|| dir.join("WebView2Data"));
         let _ = std::fs::create_dir_all(&udf);
         std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &udf);
@@ -5165,7 +5165,7 @@ const WIN_JOB_LIMIT_FLAGS: u32 = {
 };
 
 /// WebView2 spawns its `msedgewebview2.exe` browser/GPU/renderer helpers as ordinary
-/// child processes. When KuroCat dies hard (crash or Task Manager "End task"), nothing
+/// child processes. When DSH Pet dies hard (crash or Task Manager "End task"), nothing
 /// gets to run our exit code and the whole helper tree can survive as orphans.
 ///
 /// Assigning ourselves to a `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` Job Object before Tauri
@@ -5214,12 +5214,12 @@ static WINDOWS_SINGLE_INSTANCE_MUTEX: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 // dsh-pet v2.0: the vendored build uses its OWN mutex so it can run alongside the official
-// KuroCat build (which keeps "Local\\KuroCat.SingleInstance.Mutex"). Each build still
+// DSH Pet build (which keeps "Local\\DSH Pet.SingleInstance.Mutex"). Each build still
 // enforces single-instance within itself.
 #[cfg(windows)]
-const WIN_SINGLE_INSTANCE_MUTEX_NAME: &str = "Local\\KuroCatDshPet.SingleInstance.Mutex";
+const WIN_SINGLE_INSTANCE_MUTEX_NAME: &str = "Local\\DshPet.SingleInstance.Mutex";
 #[cfg(windows)]
-const WIN_SINGLE_INSTANCE_WAKE_EVENT: &str = "Local\\KuroCat.ShowExisting.Event";
+const WIN_SINGLE_INSTANCE_WAKE_EVENT: &str = "Local\\DSH Pet.ShowExisting.Event";
 
 #[cfg(windows)]
 fn win_try_acquire_named_mutex(name: &str) -> Result<usize, bool> {
@@ -5374,7 +5374,7 @@ fn acquire_single_instance_lock(wait_briefly: bool) -> bool {
 
         let dir = config::app_data_dir();
         let _ = std::fs::create_dir_all(&dir);
-        let lock_path = dir.join("kurocat.lock");
+        let lock_path = dir.join("dshpet.lock");
         let (attempts, delay_ms) = if wait_briefly { (80, 100) } else { (6, 60) };
         for i in 0..attempts {
             let Ok(file) = OpenOptions::new()
@@ -5456,7 +5456,7 @@ fn select_linux_webkit_env(
     has_wayland_display: bool,
     has_x11_display: bool,
     has_gdk_backend_override: bool,
-    has_kurocat_wayland_override: bool,
+    has_dshpet_wayland_override: bool,
 ) -> LinuxWebkitEnvPlan {
     let needs_shm_fallback = nvidia_driver || kylin_or_software_gl;
     let supports_force_shm = webkit_ver.map_or(true, |(maj, min, _)| (maj, min) >= (2, 44));
@@ -5473,7 +5473,7 @@ fn select_linux_webkit_env(
     let prefer_x11 = has_wayland_display
         && has_x11_display
         && !has_gdk_backend_override
-        && !has_kurocat_wayland_override;
+        && !has_dshpet_wayland_override;
 
     LinuxWebkitEnvPlan {
         force_shm,
@@ -5645,7 +5645,7 @@ fn linux_configure_display_env() {
         .map(|v| !v.is_empty())
         .unwrap_or(false);
     let has_gdk_backend_override = std::env::var_os("GDK_BACKEND").is_some();
-    let has_kurocat_wayland_override = std::env::var_os("KUROCAT_WAYLAND").is_some();
+    let has_dshpet_wayland_override = std::env::var_os("DSHPET_WAYLAND").is_some();
 
     let plan = select_linux_webkit_env(
         webkit_ver,
@@ -5656,7 +5656,7 @@ fn linux_configure_display_env() {
         has_wayland_display,
         has_x11_display,
         has_gdk_backend_override,
-        has_kurocat_wayland_override,
+        has_dshpet_wayland_override,
     );
 
     if plan.force_shm {
@@ -5675,7 +5675,7 @@ fn linux_configure_display_env() {
     }
 
     eprintln!(
-        "[kurocat] linux display: webkit={:?} nvidia={} kylin_or_vm={} force_shm={} disable_dmabuf={} nv_no_sync={} prefer_x11={}",
+        "[dshpet] linux display: webkit={:?} nvidia={} kylin_or_vm={} force_shm={} disable_dmabuf={} nv_no_sync={} prefer_x11={}",
         webkit_ver,
         nvidia_driver,
         kylin_or_software_gl,
@@ -5722,7 +5722,7 @@ pub fn run() {
         }
         #[cfg(unix)]
         if wait_briefly {
-            eprintln!("[kurocat] single-instance lock still occupied after --wait-pid handoff");
+            eprintln!("[dshpet] single-instance lock still occupied after --wait-pid handoff");
         }
         return;
     }
@@ -5900,7 +5900,7 @@ pub fn run() {
                     reload_and_emit_all(&http_handle);
                 },
                 move |ev| {
-                    let _ = agent_handle.emit("kuro-agent-event", &ev);
+                    let _ = agent_handle.emit("dshpet-agent-event", &ev);
                     if let Ok(raw) = serde_json::to_string(&ev) {
                         obs::broadcast_raw("agentEvent", &raw);
                     }
@@ -5908,17 +5908,17 @@ pub fn run() {
             );
 
             // Forward settings / cats / privacy broadcasts to OBS SSE clients (1ns no-op when OBS is off)
-            handle.listen("kuro-settings", |ev| {
+            handle.listen("dshpet-settings", |ev| {
                 obs::broadcast_raw("settings", ev.payload());
             });
-            handle.listen("kuro-cats", |ev| {
+            handle.listen("dshpet-cats", |ev| {
                 obs::broadcast_raw("cats", ev.payload());
             });
-            handle.listen("kuro-privacy", |ev| {
+            handle.listen("dshpet-privacy", |ev| {
                 let active = ev.payload().trim() == "true";
                 obs::set_privacy_active(active);
             });
-            handle.listen("kuro-game-active", |ev| {
+            handle.listen("dshpet-game-active", |ev| {
                 let raw = ev.payload();
                 let active = serde_json::from_str::<serde_json::Value>(raw)
                     .ok()
@@ -5941,25 +5941,25 @@ pub fn run() {
                     let keys: &[u32] = &[0x46, 0x53, 0x41, 0x45, 0x20, 0xA0, 0x4B];
                     for &vk in keys {
                         let _ = demo_handle.emit(
-                            "kuro-input",
+                            "dshpet-input",
                             serde_json::json!({ "kind": "keyDown", "vk": vk, "scan": 0, "repeat": false }),
                         );
                         std::thread::sleep(Duration::from_millis(100));
                         let _ = demo_handle.emit(
-                            "kuro-input",
+                            "dshpet-input",
                             serde_json::json!({ "kind": "keyUp", "vk": vk, "scan": 0 }),
                         );
                     }
                     let _ = demo_handle.emit(
-                        "kuro-input",
+                        "dshpet-input",
                         serde_json::json!({ "kind": "mouseMove", "x": 400, "y": 400, "nx": 0.25, "ny": 0.4 }),
                     );
                     let _ = demo_handle.emit(
-                        "kuro-input",
+                        "dshpet-input",
                         serde_json::json!({ "kind": "mouseDown", "button": "left" }),
                     );
                     let _ = demo_handle.emit(
-                        "kuro-input",
+                        "dshpet-input",
                         serde_json::json!({ "kind": "keyDown", "vk": 0x4B, "scan": 0, "repeat": false }),
                     );
                 });
@@ -6016,7 +6016,7 @@ pub fn run() {
             win_show_message_box(&title, &body, true);
         }
         #[cfg(not(windows))]
-        panic!("error while running KuroCat: {}", err);
+        panic!("error while running DSH Pet: {}", err);
     }
 }
 
@@ -6035,7 +6035,7 @@ mod windows_zorder_tests {
     fn detects_and_recovers_topmost_zorder_without_stealing_focus() {
         let _guard = ZORDER_TEST_LOCK.lock().unwrap();
         let class_name: Vec<u16> = "STATIC\0".encode_utf16().collect();
-        let title: Vec<u16> = "KuroCatZOrderTest\0".encode_utf16().collect();
+        let title: Vec<u16> = "DSH PetZOrderTest\0".encode_utf16().collect();
         unsafe {
             let hinst = GetModuleHandleW(std::ptr::null());
             let ex = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
@@ -6165,7 +6165,7 @@ mod windows_zorder_tests {
         // Verify win_place_below_hwnd cleanly slips model beneath a topmost notification popup
         // while keeping model topmost (drop_topmost = false) AND demotes when drop_topmost = true.
         let class_name: Vec<u16> = "STATIC\0".encode_utf16().collect();
-        let title: Vec<u16> = "KuroCatYieldTest\0".encode_utf16().collect();
+        let title: Vec<u16> = "DSH PetYieldTest\0".encode_utf16().collect();
         unsafe {
             let hinst = GetModuleHandleW(std::ptr::null());
             let ex = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
@@ -6773,7 +6773,7 @@ mod side_menu_layout_tests {
     fn single_instance_mutex_blocks_duplicate_until_released() {
         use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 
-        let name = format!("Local\\KuroCat.UnitTest.Mutex.{}", std::process::id());
+        let name = format!("Local\\DSH Pet.UnitTest.Mutex.{}", std::process::id());
         let first = super::win_try_acquire_named_mutex(&name)
             .expect("first acquire of fresh named mutex must succeed");
         assert_eq!(
@@ -6798,18 +6798,18 @@ mod side_menu_layout_tests {
             "--wait-pid",
             "4242",
             "--handoff-event",
-            "Local\\KuroCat.AdminHandoff.4242.1",
+            "Local\\DSH Pet.AdminHandoff.4242.1",
             "--cleanup-old-exe",
-            "C:\\Users\\test\\KuroCat.exe.old",
+            "C:\\Users\\test\\DshPet.exe.old",
         ]);
         assert_eq!(parsed.wait_pid, Some(4242));
         assert_eq!(
             parsed.handoff_event.as_deref(),
-            Some("Local\\KuroCat.AdminHandoff.4242.1")
+            Some("Local\\DSH Pet.AdminHandoff.4242.1")
         );
         assert_eq!(
             parsed.cleanup_old_exe.as_deref(),
-            Some("C:\\Users\\test\\KuroCat.exe.old")
+            Some("C:\\Users\\test\\DshPet.exe.old")
         );
     }
 
@@ -6822,7 +6822,7 @@ mod side_menu_layout_tests {
         const WAIT_OBJECT_0: u32 = 0;
         const WAIT_TIMEOUT: u32 = 258;
 
-        let name = format!("Local\\KuroCat.UnitTest.Handoff.{}", std::process::id());
+        let name = format!("Local\\DSH Pet.UnitTest.Handoff.{}", std::process::id());
         let ev = super::win_create_session_event(&name, true);
         assert!(!ev.is_null(), "session event creation must succeed");
         unsafe {
@@ -6842,16 +6842,16 @@ mod side_menu_layout_tests {
     #[test]
     fn elevated_webview2_user_data_folder_isolates_from_standard_profile() {
         let local = std::path::Path::new(r"C:\Users\alice\AppData\Local");
-        let exe_dir = std::path::Path::new(r"C:\Users\alice\AppData\Local\KuroCat");
+        let exe_dir = std::path::Path::new(r"C:\Users\alice\AppData\Local\DSH Pet");
         let isolated = super::win_elevated_webview2_user_data_folder(Some(local), exe_dir);
         assert_eq!(
             isolated,
-            std::path::PathBuf::from(r"C:\Users\alice\AppData\Local\com.kurocat.pet\EBWebView-Admin")
+            std::path::PathBuf::from(r"C:\Users\alice\AppData\Local\com.hanwu.dshpet\EBWebView-Admin")
         );
         let fallback = super::win_elevated_webview2_user_data_folder(None, exe_dir);
         assert_eq!(
             fallback,
-            std::path::PathBuf::from(r"C:\Users\alice\AppData\Local\KuroCat\WebView2Data-Admin")
+            std::path::PathBuf::from(r"C:\Users\alice\AppData\Local\DSH Pet\WebView2Data-Admin")
         );
     }
 

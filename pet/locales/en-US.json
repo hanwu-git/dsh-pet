@@ -5,7 +5,7 @@
     "code": "en-US"
   },
   "menu": {
-    "header": "🐈‍⬛ KuroCat",
+    "header": "🐈‍⬛ DSH Pet",
     "close_title": "Close menu (Esc)",
     "tab_appearance": "🐱 Pet & Looks",
     "tab_system": "⚙️ Keys · OBS · Sys",
@@ -98,7 +98,7 @@
     "live_chroma_green": "Green",
     "live_chroma_magenta": "Pink",
     "live_hide_pet": "Live Only (Hide Desktop Cat)",
-    "live_guide_hint": "Window Capture \"KuroCat Live\" → Chroma Key",
+    "live_guide_hint": "Window Capture \"DSH Pet Live\" → Chroma Key",
     "toggle_mcp": "Enable MCP Server",
     "copy_mcp": "Copy MCP Config",
     "mcp_hint": "AI Pets",
@@ -139,9 +139,9 @@
     "game_admin_hint": "Game runs as Admin · elevate to sync keys"
   },
   "tray": {
-    "tooltip": "KuroCat",
-    "tooltip_admin": "KuroCat (Admin · Game Input Ready)",
-    "toggle_show": "Show / Hide KuroCat",
+    "tooltip": "DSH Pet",
+    "tooltip_admin": "DSH Pet (Admin · Game Input Ready)",
+    "toggle_show": "Show / Hide DSH Pet",
     "pause_guard": "Pause Hooks & Hide (Anti-Cheat Safe)",
     "admin_ready": "✓ Running as Administrator",
     "admin_restart": "Restart as Administrator (For Games)",
@@ -158,7 +158,7 @@
     "obs_toggle": "Enable OBS Source (127.0.0.1:{port})",
     "obs_hide_pet": "OBS Only (Hide Desktop Pet)",
     "obs_open_browser": "Preview OBS Source in Browser",
-    "live_capture_toggle": "Open Live Capture Window (KuroCat Live)",
+    "live_capture_toggle": "Open Live Capture Window (DSH Pet Live)",
     "live_hide_pet": "Live Window Only (Hide Desktop Cat)",
     "breed_menu": "Pet Skin",
     "scale_menu": "Pet Scale",
@@ -185,7 +185,7 @@
     "fps_60": "Smooth 60 FPS (Default)",
     "fps_30": "Eco 30 FPS (Lower CPU/GPU)",
     "reset_pos": "Reset to Bottom-Right",
-    "desktop_shortcut": "Create Desktop Shortcut (KuroCat)",
+    "desktop_shortcut": "Create Desktop Shortcut (DSH Pet)",
     "mac_input_menu": "Input Hooks & Permissions",
     "mac_reset_perms": "Reset Permissions & Re-authorize (After Upgrade)",
     "mac_reconnect": "Reconnect Input Hooks (Karabiner Fix)",
@@ -195,6 +195,6 @@
     "check_update": "Check for Updates (v{ver})",
     "interact_menu": "Companion",
     "system_menu": "Preferences",
-    "quit": "Quit KuroCat"
+    "quit": "Quit DSH Pet"
   }
 }

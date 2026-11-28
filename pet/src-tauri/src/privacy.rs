@@ -35,7 +35,7 @@ pub fn start_password_privacy_watcher(
                     active = false;
                     clear_streak = 0;
                     input_hook::set_password_privacy_active(false);
-                    let _ = app.emit("kuro-privacy", false);
+                    let _ = app.emit("dshpet-privacy", false);
                 }
                 continue;
             }
@@ -52,7 +52,7 @@ pub fn start_password_privacy_watcher(
                 if !active {
                     active = true;
                     input_hook::set_password_privacy_active(true);
-                    let _ = app.emit("kuro-privacy", true);
+                    let _ = app.emit("dshpet-privacy", true);
                 }
             } else if active {
                 // Brief 2-tick (~280ms) debounce before exiting so focus flickers inside a login form don't flash open
@@ -61,7 +61,7 @@ pub fn start_password_privacy_watcher(
                     active = false;
                     clear_streak = 0;
                     input_hook::set_password_privacy_active(false);
-                    let _ = app.emit("kuro-privacy", false);
+                    let _ = app.emit("dshpet-privacy", false);
                 }
             }
         }
@@ -300,7 +300,7 @@ mod win_impl {
             // ES_PASSWORD (0x0020) is ONLY valid on Edit / RichEdit window classes!
             // On other Win32 controls (e.g. SysTreeView32 TVS_SHOWSELALWAYS, SysTabControl32
             // TCS_FORCELABELLEFT, Explorer/WPS widgets), bit 0x0020 has an unrelated meaning
-            // and would falsely lock KuroCat in closed-eyes password mode.
+            // and would falsely lock DSH Pet in closed-eyes password mode.
             let mut is_classic_password =
                 is_classic_edit_class(&cls_name) && (style & ES_PASSWORD) != 0 && !is_multiline;
 

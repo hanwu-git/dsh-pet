@@ -173,7 +173,7 @@ pub fn configure_fullscreen(window: &WebviewWindow, always_on_top: bool) {
 }
 
 /// Checks whether the frontmost macOS application is a Remote Desktop / screen-sharing client
-/// so KuroCat can temporarily yield beneath it without hiding (#40 cross-platform parity).
+/// so DSH Pet can temporarily yield beneath it without hiding (#40 cross-platform parity).
 pub fn frontmost_is_remote_desktop() -> bool {
     use objc2::msg_send;
     use objc2::runtime::{AnyClass, AnyObject};
@@ -206,7 +206,7 @@ pub fn frontmost_is_remote_desktop() -> bool {
     }
 }
 
-/// Smoothly yields KuroCat from `NSStatusWindowLevel` down to `NSNormalWindowLevel` while a
+/// Smoothly yields DSH Pet from `NSStatusWindowLevel` down to `NSNormalWindowLevel` while a
 /// Remote Desktop app is active, then restores `NSStatusWindowLevel` when switching away (#40).
 pub fn set_yielded_below_remote_desktop(window: &WebviewWindow, yielded: bool) {
     let window = window.clone();
@@ -334,7 +334,7 @@ pub fn handle_display_menu(app: &AppHandle, item_id: &str) {
         settings.clone()
     };
     let _ = refresh_menu(app);
-    let _ = app.emit("kuro-settings", updated);
+    let _ = app.emit("dshpet-settings", updated);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
