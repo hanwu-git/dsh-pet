@@ -142,6 +142,11 @@ let ownerPid = null;
 // Session ids currently in the "running" state. The status light is on iff this set is non-empty:
 // one agent ending must not turn the light off while other agents are still working.
 const runningSet = new Set();
+// Safety net: an id that stays "running" far longer than any real task, with no activity,
+// is treated as stale and dropped. Protects against a missed agent/disposed event leaving
+// the pet permanently stuck on 任务执行中.
+const runningSince = new Map();
+const STALE_RUNNING_MS = 45 * 60 * 1000;
 // Most recent "navigate to this session" request, handed from the desktop window (via cmd.json)
 // to the web client (via the take-navigation RPC). Overwrite semantics are fine: latest wins.
 let pendingNavigation = null;
@@ -462,16 +467,36 @@ export function apply(ctx) {
   ctx.on("agent/status", ({ agent, status }) => {
     const id = agent && agent.id;
     if (status === "running") {
-      if (id) runningSet.add(id);
+      if (id) { runningSet.add(id); runningSince.set(id, Date.now()); }
       if (bridgeOn && runningSet.size === 1) petBridge.bridgeEvent("runningStart");
       if (!pinned) return;
       writeState({ active: true });
     } else {
-      if (id) runningSet.delete(id);
+      if (id) { runningSet.delete(id); runningSince.delete(id); }
       if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
       if (!pinned) return;
       writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
+  });
+  // An agent can finish WITHOUT ever emitting agent/status=idle (disposal path). Without
+  // this, its id stays in runningSet forever: the heartbeat keeps re-sending "working" and
+  // the pet is stuck showing 任务执行中 even though every DSH task has finished.
+  ctx.on("agent/disposed", ({ agent }) => {
+    const id = agent && agent.id;
+    if (!id || !runningSet.has(id)) return;
+    runningSet.delete(id);
+    runningSince.delete(id);
+    if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
+    if (pinned) writeState({ active: runningSet.size > 0, runningEnd: { id } });
+  });
+  // Sessions also end independently of agents; clear anything still attributed to one so a
+  // disposed-session edge case cannot leave the pet stuck either.
+  ctx.on("session/disposed", (session) => {
+    const id = session && session.id;
+    if (!id || !runningSet.has(id)) return;
+    runningSet.delete(id);
+    runningSince.delete(id);
+    if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
   });
   ctx.on("agent/error", ({ agent, error }) => {
     const message = String((error && error.message) || "执行出错").slice(0, 60);
@@ -525,6 +550,24 @@ export function apply(ctx) {
   // flag), so this heartbeat is the authority: it fires only while runningSet is non-empty.
   // Cheap: one loopback POST every 3s, only while a task runs.
   const workingHeartbeat = setInterval(() => {
+    // Safety net: drop entries that have been "running" longer than any plausible task.
+    // A missed agent/disposed would otherwise strand the pet on 任务执行中 forever.
+    const now = Date.now();
+    let dropped = false;
+    for (const [id, since] of runningSince) {
+      if (now - since > STALE_RUNNING_MS) {
+        runningSet.delete(id);
+        runningSince.delete(id);
+        dropped = true;
+      }
+    }
+    if (dropped) {
+      logLine("running-set-pruned", { remaining: runningSet.size });
+      if (runningSet.size === 0) {
+        petBridge.bridgeEvent("runningEnd");
+        return;
+      }
+    }
     if (!petBridge.isRunning()) return;
     petBridge.bridgeEvent("runningStart", { text: "任务执行中…" });
   }, 3_000);
