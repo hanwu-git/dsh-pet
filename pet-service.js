@@ -464,6 +464,12 @@ export function apply(ctx) {
   // ANY agent is working, and emit a completion bubble on EVERY agent end (even while others
   // keep running). writeState replaces the whole file each call, so `active` and `runningEnd`
   // must be written in the SAME call — two calls would overwrite each other.
+  // IMPORTANT: agent/session events are dispatched through a scope carrier, and cordis
+  // filters listeners by scope:
+  //   hook.global || !filter || filter.call(thisArg, hook.ctx)
+  // Our plugin is mounted at the host root, outside any agent's scope, so EVERY agent- and
+  // session-scoped subscription MUST pass { global: true } or it silently never fires.
+  // (That omission is why the pet never saw agent/status and the heartbeat never ran.)
   ctx.on("agent/status", ({ agent, status }) => {
     const id = agent && agent.id;
     if (status === "running") {
@@ -477,7 +483,7 @@ export function apply(ctx) {
       if (!pinned) return;
       writeState({ active: runningSet.size > 0, runningEnd: { id } });
     }
-  });
+  }, { global: true });
   // An agent can finish WITHOUT ever emitting agent/status=idle (disposal path). Without
   // this, its id stays in runningSet forever: the heartbeat keeps re-sending "working" and
   // the pet is stuck showing 任务执行中 even though every DSH task has finished.
@@ -488,7 +494,7 @@ export function apply(ctx) {
     runningSince.delete(id);
     if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
     if (pinned) writeState({ active: runningSet.size > 0, runningEnd: { id } });
-  });
+  }, { global: true });
   // Sessions also end independently of agents; clear anything still attributed to one so a
   // disposed-session edge case cannot leave the pet stuck either.
   ctx.on("session/disposed", (session) => {
@@ -497,13 +503,13 @@ export function apply(ctx) {
     runningSet.delete(id);
     runningSince.delete(id);
     if (bridgeOn && runningSet.size === 0) petBridge.bridgeEvent("runningEnd");
-  });
+  }, { global: true });
   ctx.on("agent/error", ({ agent, error }) => {
     const message = String((error && error.message) || "执行出错").slice(0, 60);
     if (bridgeOn) petBridge.bridgeEvent("fail", { message });
     if (!pinned) return;
     writeState({ fail: { id: agent && agent.id, message } });
-  });
+  }, { global: true });
   ctx.on("session/event", (session, event) => {
     const isAsk = (event.type === "tool/call" && event.data && event.data.name === "ask_user_question")
       || event.type === "approval/asked";
