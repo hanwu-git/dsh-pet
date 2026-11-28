@@ -64,12 +64,73 @@ export class AgentCompanionController {
   private ttlTimer: number | null = null;
   private burstRemaining = 0;
   private lastSoundAt = 0;
+  /** True while the DSH host reports a running task (drives the persistent working bubble). */
+  private taskRunning = false;
+  /** Text/source currently shown, kept so a re-assert can restore it without flicker. */
+  private workingText = '任务执行中…';
+  /** Close button appended to the bubble (pointer-events:auto, the pill itself is none). */
+  private closeBtnEl: HTMLButtonElement | null = null;
 
   constructor(opts: AgentCompanionOptions) {
     this.bubbleEl = opts.bubbleEl;
     this.getTarget = opts.getTarget;
     this.is3DTarget = opts.is3DTarget;
     this.allowSound = opts.allowSound;
+    this.attachCloseButton();
+  }
+
+  /** Append a ✕ button inside the pill. The pill is pointer-events:none, so the button
+   *  re-enables its own pointer events — click-through behaviour is unaffected elsewhere. */
+  private attachCloseButton(): void {
+    const el = this.bubbleEl;
+    if (!el) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '×';
+    btn.setAttribute('aria-label', '关闭提示');
+    btn.style.cssText = [
+      'pointer-events:auto',
+      'margin-left:6px',
+      'padding:0 2px',
+      'border:0',
+      'background:transparent',
+      'color:inherit',
+      'font-size:13px',
+      'line-height:1',
+      'cursor:pointer',
+      'opacity:0.75',
+    ].join(';');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.onBubbleDismissed();
+    });
+    el.appendChild(btn);
+    this.closeBtnEl = btn;
+  }
+
+  /** User clicked the bubble's ✕. Hide it, then restore the persistent "working" bubble if
+   *  a DSH task is still running — that is the whole point: the running notice comes BACK
+   *  once a newer (done/error/waiting) notice has been dismissed. */
+  private onBubbleDismissed(): void {
+    this.clearTtlTimer();
+    this.hideBubble();
+    if (this.taskRunning && !this.privacyPaused) {
+      // Re-assert immediately; no TTL — it stays until the task ends or another notice lands.
+      this.showBubble('DSH', this.workingText, 'working');
+      this.activeStatus = 'working';
+    } else {
+      this.activeStatus = 'idle';
+    }
+  }
+
+  /** External hook for the settings/cat-switch path: re-assert the running bubble if a task
+   *  is running and the bubble is currently hidden (e.g. after a skin change re-rendered). */
+  public reassertWorkingBubble(): void {
+    if (!this.taskRunning || this.privacyPaused) return;
+    if (!this.bubbleEl || !this.bubbleEl.classList.contains('hidden')) return;
+    this.showBubble('DSH', this.workingText, 'working');
+    this.activeStatus = 'working';
   }
 
   public setPrivacyMode(active: boolean): void {
@@ -77,6 +138,8 @@ export class AgentCompanionController {
     if (this.privacyPaused) {
       this.releaseAllVirtualKeys();
       this.hideBubble();
+    } else {
+      this.reassertWorkingBubble();
     }
   }
 
@@ -123,15 +186,41 @@ export class AgentCompanionController {
     const status = (ev.status || 'idle').toLowerCase() as AgentStatusKind;
     this.activeStatus = status;
 
+    // Track the running flag that drives the persistent bubble. `working` sets it;
+    // `done`/`error`/`idle` clear it; `waiting`/`thinking` leave it untouched (the task is
+    // still alive, it just wants your attention).
+    if (status === 'working') {
+      this.taskRunning = true;
+      if (ev.text) this.workingText = ev.text;
+    } else if (status === 'done' || status === 'error' || status === 'idle') {
+      this.taskRunning = false;
+    }
+
     switch (status) {
       case 'working': {
+        // Heartbeat-aware: the DSH host re-sends `working` every few seconds while a task
+        // runs. If a NEWER notice (done/error/waiting/info) is currently on screen, this
+        // heartbeat must NOT stomp on it — it only refreshes our taskRunning flag. The
+        // working bubble is (re)shown when the pill is hidden, which is exactly the
+        // "dismiss a notice, running notice comes back" behaviour.
+        const el = this.bubbleEl;
+        const bubbleHidden = !el || el.classList.contains('hidden');
+        const tone = el?.dataset.tone;
+        const newerNoticeVisible = !bubbleHidden && tone !== undefined && tone !== 'working';
+        if (newerNoticeVisible) {
+          // Keep the newer notice; just remember we are still running.
+          this.startAutoTypingIfNeeded(ev);
+          return;
+        }
         if (ev.autoType !== false) {
           this.startAutoTyping();
         } else {
           this.stopAutoTyping();
         }
         this.showBubble(ev.source, ev.text || '写代码中…', 'working');
-        this.scheduleTtlClear(ev.ttlMs ?? 45_000);
+        // The running bubble is PERSISTENT while a task runs: no auto-hide TTL. It only
+        // leaves when the task ends or a newer notice replaces it (then dismiss restores it).
+        this.clearTtlTimer();
         break;
       }
       case 'thinking': {
@@ -248,6 +337,15 @@ export class AgentCompanionController {
     this.scheduleNextVirtualKey(40);
   }
 
+  /** Start typing without disturbing a notice that is currently on screen. */
+  private startAutoTypingIfNeeded(ev: AgentCompanionEvent): void {
+    if (ev.autoType === false) {
+      this.stopAutoTyping();
+      return;
+    }
+    this.startAutoTyping();
+  }
+
   private stopAutoTyping(): void {
     this.autoTyping = false;
     if (this.typeTimer !== null) {
@@ -330,7 +428,19 @@ export class AgentCompanionController {
                 ? '❌'
                 : '🐾';
     el.dataset.tone = tone;
-    el.textContent = `${icon} ${prefix}${text}`;
+    // IMPORTANT: write the text into a dedicated span, never el.textContent — the ✕ close
+    // button is a child of the pill and would be destroyed by a textContent assignment.
+    let textEl = el.querySelector<HTMLSpanElement>('.agent-bubble-text');
+    if (!textEl) {
+      // First call: build the structure. Clear any static placeholder text from index.html.
+      el.textContent = '';
+      textEl = document.createElement('span');
+      textEl.className = 'agent-bubble-text';
+      el.appendChild(textEl);
+      if (this.closeBtnEl) el.appendChild(this.closeBtnEl);
+      el.classList.add('agent-bubble--has-close');
+    }
+    textEl.textContent = `${icon} ${prefix}${text}`;
     el.classList.remove('hidden');
   }
 
@@ -350,6 +460,13 @@ export class AgentCompanionController {
     this.clearTtlTimer();
     this.ttlTimer = window.setTimeout(() => {
       this.ttlTimer = null;
+      // A transient notice expired. If a DSH task is STILL running, fall back to the
+      // persistent working bubble instead of going blank.
+      if (this.taskRunning && !this.privacyPaused) {
+        this.showBubble('DSH', this.workingText, 'working');
+        this.activeStatus = 'working';
+        return;
+      }
       this.activeStatus = 'idle';
       this.stopAutoTyping();
       this.hideBubble();

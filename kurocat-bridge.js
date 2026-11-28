@@ -13,7 +13,7 @@
 //   the KuroCat pet mode, the bridge can spawn/stop the KuroCat.exe process itself.
 
 import http from "node:http";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -116,9 +116,57 @@ export function bridgeEvent(kind, detail = {}) {
   };
   const payload = map[kind];
   if (!payload) return false;
+  if (kind === "runningStart") running = true;
+  if (kind === "runningEnd" || kind === "fail") running = false;
   pending.set(kind, payload);
   if (!flushTimer) flushTimer = setTimeout(flush, 500);
   return true;
+}
+
+// ---- persistent "working" state -------------------------------------------------
+// Requirement: while DSH has ANY running task, the cat keeps a bubble on screen — and
+// after a newer notice (done/error/waiting) is dismissed, the working bubble comes BACK
+// if the task is still running. The DSH host therefore (a) sends runningStart once, and
+// (b) re-asserts the state whenever the pet asks (GET /dsh/state) or periodically via
+// this heartbeat, so the pet can restore the bubble after a dismissal or a restart.
+let running = false;
+/** True while at least one DSH agent is running (bridge's own view). */
+export function isRunning() {
+  return running;
+}
+/** Snapshot for the pet: what should the bubble say right now, if anything? */
+export function stateSnapshot() {
+  if (!running) return { running: false };
+  return {
+    running: true,
+    status: "working",
+    source: "DSH",
+    text: "任务执行中…",
+    autoType: true,
+    ttlMs: 45_000,
+    sound: false,
+  };
+}
+
+// ---- pet → host callback listener ------------------------------------------------
+// The pet posts to /dsh/notify when the user dismisses a notice bubble, or when it wants
+// the current state. The host keeps a polled queue (same pattern as take-navigation)
+// so the web client can act on it.
+let petStateQuery = false;
+export function takePetStateQuery() {
+  const v = petStateQuery;
+  petStateQuery = false;
+  return v;
+}
+
+/** Handle a POST body from the pet's /dsh/notify endpoint. Fire-and-forget. */
+export function handlePetNotify(body) {
+  if (!body || typeof body !== "object") return false;
+  if (body.kind === "dismissed" || body.kind === "state-query") {
+    petStateQuery = true;
+    return true;
+  }
+  return false;
 }
 
 async function flush() {
@@ -171,13 +219,42 @@ export async function startSidecar() {
   return { ok: false, reason: "spawn failed or port never became ready" };
 }
 
-/** Terminate the pet process we spawned (only when the user chose "close" at DSH exit,
- * or an explicit stop is requested). An adopted instance is never killed from here. */
+/** Terminate the pet process. Two cases:
+ * - A pet WE spawned: kill the tracked handle directly.
+ * - An ADOPTED instance (already running when we attached, or started standalone): we hold
+ *   no handle, so on Windows resolve the PID that owns the pet port and terminate its tree.
+ *   Called only for explicit stop actions — pet-mode switch back to collie, the settings
+ *   page stop button, and the DSH-exit "close" choice — never on a mere re-attach. */
 export function stopSidecar() {
   if (sidecarProc && sidecarProc.exitCode === null) {
     try { sidecarProc.kill(); } catch { /* ignore */ }
     sidecarProc = null;
   }
+  // Adopted instance: no handle to kill, so stop whatever answers on the pet port.
+  killByPort(state.port);
+}
+
+/** Best-effort Windows helper: find the PID LISTENING on `port` and terminate its tree.
+ *  Uses `netstat -ano` (always present on Windows) plus `taskkill /T /F`; every step is
+ *  guarded so a missing tool or an already-gone process never throws. No-op off Windows. */
+function killByPort(port) {
+  if (process.platform !== "win32") return false;
+  try {
+    const out = execFileSync("netstat", ["-ano"], { encoding: "utf8", windowsHide: true, timeout: 5000 });
+    const lines = out.split(/\r?\n/);
+    for (const line of lines) {
+      // TCP    127.0.0.1:27430    0.0.0.0:0    LISTENING    6080
+      const m = /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/.exec(line.trim());
+      if (!m || Number(m[1]) !== port) continue;
+      const pid = Number(m[2]);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      try {
+        execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
+        return true;
+      } catch { /* process may have exited between netstat and taskkill */ }
+    }
+  } catch { /* netstat unavailable or timed out — nothing we can do */ }
+  return false;
 }
 
 /** Probe + state for the settings page status display. */

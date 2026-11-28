@@ -505,6 +505,19 @@ export function apply(ctx) {
   }, 800);
   ctx.effect(() => () => clearInterval(cmdTimer));
 
+  // Persistent "working" bubble heartbeat. While at least one DSH agent is running, re-send
+  // the working status to the pet every 3s. Rationale: the pet keeps the working bubble on
+  // screen permanently, but when a NEWER notice (done/error/waiting) replaces it and the user
+  // dismisses that notice, the pet must restore "任务执行中" if — and only if — DSH still has
+  // a running task. The pet cannot know that on its own (the done event cleared its local
+  // flag), so this heartbeat is the authority: it fires only while runningSet is non-empty.
+  // Cheap: one loopback POST every 3s, only while a task runs.
+  const workingHeartbeat = setInterval(() => {
+    if (!kuroBridge.isRunning()) return;
+    kuroBridge.bridgeEvent("runningStart", { text: "任务执行中…" });
+  }, 3_000);
+  ctx.effect(() => () => clearInterval(workingHeartbeat));
+
   // RPC route behind the connection trust fence (browser cookie is verified per request).
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",

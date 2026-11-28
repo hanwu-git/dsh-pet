@@ -1002,6 +1002,13 @@ html.win7-ulw-mode .floating-side-menu {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.34);
   z-index: 45;
   animation: agentBubbleIn 0.18s ease-out;
+  display: flex;
+  align-items: center;
+}
+
+/* The ✕ close button is the only interactive part; the pill stays click-through. */
+.agent-bubble--has-close {
+  padding-right: 6px;
 }
 
 .agent-bubble.hidden {
